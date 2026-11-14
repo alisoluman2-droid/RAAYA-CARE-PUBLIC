@@ -1,6 +1,8 @@
 name: Build RAAYA CARE APK
+
 on:
   workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -12,40 +14,113 @@ jobs:
           java-version: '17'
 
       - name: Create Android app
+        shell: bash
         run: |
           mkdir -p app/src/main/java/com/raayacare/app
-          echo "pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }; dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }; rootProject.name = 'RaayaCare'; include ':app'" > settings.gradle
-          echo "plugins { id 'com.android.application' version '8.7.3' apply false }" > build.gradle
-          echo "plugins { id 'com.android.application' }; android { namespace 'com.raayacare.app'; compileSdk 35; defaultConfig { applicationId 'com.raayacare.app'; minSdk 23; targetSdk 28; versionCode 1; versionName '1.0' } }" > app/build.gradle
-          echo '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.INTERNET"/><application android:label="RAAYA CARE" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:usesCleartextTraffic="false"><activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>' > app/src/main/AndroidManifest.xml
+          cat > settings.gradle <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name = 'RaayaCare'
+          include ':app'
+          EOF
+          cat > build.gradle <<'EOF'
+          plugins { id 'com.android.application' version '8.7.3' apply false }
+          EOF
+          cat > app/build.gradle <<'EOF'
+          plugins { id 'com.android.application' }
+          android {
+              namespace 'com.raayacare.app'
+              compileSdk 35
+              defaultConfig {
+                  applicationId 'com.raayacare.app'
+                  minSdk 23
+                  targetSdk 35
+                  versionCode 2
+                  versionName '1.1'
+              }
+          }
+          EOF
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+              <application android:label="RAAYA CARE" android:usesCleartextTraffic="false" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+                  <activity android:name=".MainActivity" android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
           cat > app/src/main/java/com/raayacare/app/MainActivity.java <<'EOF'
           package com.raayacare.app;
+
           import android.app.Activity;
           import android.os.Bundle;
           import android.webkit.WebView;
           import android.webkit.WebViewClient;
           import android.webkit.WebChromeClient;
           import android.webkit.WebSettings;
+          import android.webkit.WebResourceRequest;
+          import android.webkit.WebResourceError;
+          import android.widget.Toast;
+
           public class MainActivity extends Activity {
-            WebView web;
-            public void onCreate(Bundle b) {
-              super.onCreate(b);
-              web = new WebView(this);
-              setContentView(web);
-              web.setWebViewClient(new WebViewClient());
-              web.setWebChromeClient(new WebChromeClient());
-              web.getSettings().setJavaScriptEnabled(true);
-              web.getSettings().setDomStorageEnabled(true);
-              web.loadUrl("https://alisoluman2-droid.github.io/RAAYA-CARE-PUBLIC/");
-            }
-            @Override public void onBackPressed() {
-              if(web.canGoBack()) web.goBack(); else super.onBackPressed();
-            }
+              private WebView web;
+              private static final String HOME = "https://alisoluman2-droid.github.io/RAAYA-CARE-PUBLIC/";
+
+              @Override public void onCreate(Bundle state) {
+                  super.onCreate(state);
+                  web = new WebView(this);
+                  setContentView(web);
+                  WebSettings settings = web.getSettings();
+                  settings.setJavaScriptEnabled(true);
+                  settings.setDomStorageEnabled(true);
+                  settings.setAllowFileAccess(false);
+                  settings.setAllowContentAccess(false);
+                  web.setWebChromeClient(new WebChromeClient());
+                  web.setWebViewClient(new WebViewClient() {
+                      @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                          if (request.isForMainFrame()) {
+                              Toast.makeText(MainActivity.this, "تعذر فتح رايا كير. تحقق من الإنترنت ثم أعد المحاولة.", Toast.LENGTH_LONG).show();
+                          }
+                      }
+                  });
+                  web.loadUrl(HOME);
+              }
+
+              @Override public void onBackPressed() {
+                  if (web != null && web.canGoBack()) web.goBack();
+                  else super.onBackPressed();
+              }
+
+              @Override protected void onDestroy() {
+                  if (web != null) {
+                      web.destroy();
+                      web = null;
+                  }
+                  super.onDestroy();
+              }
           }
           EOF
+
       - name: Build APK
-        run: gradle wrapper --gradle-version 8.9 && ./gradlew assembleDebug
+        run: |
+          gradle wrapper --gradle-version 8.9
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Check APK contents
+        shell: bash
+        run: |
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          ls -lh app/build/outputs/apk/debug/app-debug.apk
+          unzip -l app/build/outputs/apk/debug/app-debug.apk | head -25
+
       - uses: actions/upload-artifact@v4
         with:
           name: RAAYA-CARE-APK
-          path: app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
