@@ -70,7 +70,7 @@ jobs:
 
           public class MainActivity extends Activity {
               private WebView web;
-              private static final String HOME = "https://elegant-banoffee-dc1a25.netlify.app/";
+              private static final String HOME = "https://frolicking-kleicha-e7c846.netlify.app/";
 
               @Override public void onCreate(Bundle state) {
                   super.onCreate(state);
