@@ -241,23 +241,7 @@ renderSalary();
  // A guard entry prevents Android Back from immediately leaving a freshly opened local HTML file.
  history.replaceState({raayaScreen:'login',raayaBase:true},'',location.href);
  history.pushState({raayaScreen:'login',raayaGuard:true},'','#login');
- window.addEventListener('popstate',e=>{
-   historyGuard=true;
-   const target=e.state?.raayaScreen;
-   if(current==='admin'&&selected){
-     window.raayaAdminOpen(null);
-     history.replaceState({raayaScreen:'admin'},'','#admin');
-   }else if(target&&document.getElementById(target)&&target!==current){
-     current=target;oldShow(target);
-     if(target==='admin')window.raayaAdminOpen(null);
-   }else{
-     const fallback=current==='welcome'?'login':current==='login'?'login':current==='admin'?'account':'client';
-     current=fallback;oldShow(fallback);
-   }
-   // Maintain a same-document history entry so another Back remains inside RAAYA CARE.
-   history.pushState({raayaScreen:current,raayaGuard:true},'','#'+current);
-   historyGuard=false;
- });
+  // Navigation is handled by the single final guard below.
  window.raayaAdminOpen(null);
 })();
 </script>
@@ -1111,6 +1095,8 @@ try {
  const adminNames=new Set(['علي سليمان','سمر النتشة']);
  window.isDemoAdmin=function(){return adminNames.has(normalize(person));};
  function home(){return selectedRole==='staff'?'staff':selectedRole==='applicant'?'applicant':selectedRole==='admin'?'admin':'client';}
+  // The hardware-back handler must read the same role as the login router.
+  window.raayaActiveRole=function(){return selectedRole;};
  window.show=function(id){
   if(id==='login'){selectedRole=null;return originalShow('login');}
   if(selectedRole && id!=='login' && !allowedScreens[selectedRole].has(id))id=home();
@@ -1125,6 +1111,17 @@ try {
    selectedRole='admin';window.show('admin');
   }else window.show('welcome');
  };
+ // Route only a verified Firebase admin UID to the admin dashboard.
+ window.raayaCompleteVerifiedAdminLogin=function(verifiedUid){
+  const permitted=['FZbVofv8lFWtjSXPDsIRngYmK8H3','I2m6vtkc0VX3xs3OWhbZ4vMg7SE3'];
+  if(!permitted.includes(String(verifiedUid||'')))throw Error('الحساب غير مخوّل للإدارة');
+  const name=normalize(document.getElementById('loginName').value);
+  if(!adminNames.has(name))throw Error('اسم الإدارة غير معروف');
+  person=name;role='admin';selectedRole='admin';
+  if(typeof raayaPreviousScreens!=='undefined')raayaPreviousScreens.length=0;
+  window.show('admin');
+  if(typeof window.raayaAdminOpen==='function')window.raayaAdminOpen(null);
+ };
  const originalLogin=window.login;
  window.login=function(r){
   if(selectedRole)return window.show(home());
@@ -1132,6 +1129,7 @@ try {
   selectedRole=r;return originalLogin(r);
  };
  window.raayaRoleExit=function(){
+  if(typeof window.raayaAdminOpen==='function')window.raayaAdminOpen(null);
   selectedRole=null;person='';role='client';demoOtp='';
   if(typeof raayaPreviousScreens!=='undefined')raayaPreviousScreens.length=0;
   document.getElementById('loginName').value='';document.getElementById('loginPhone').value='';
@@ -1139,7 +1137,7 @@ try {
  };
  const exit=document.querySelector('#admin .top button[data-k="exit"]');
  if(exit)exit.onclick=()=>window.raayaRoleExit();
- window.addEventListener('popstate',function(e){if(selectedRole){e.stopImmediatePropagation();window.show(home());}},true);
+ // Back navigation is handled by the final role-aware guard.
 })();
 </script><script>
 /* Admin section navigation: only the dashboard shows account logout. */
@@ -1178,7 +1176,6 @@ try {
 
  const codeEl=document.getElementById('raayaAdminCode'),err=document.getElementById('raayaAdminError');
  function resetCode(){wrap.classList.add('hide');codeEl.value='';err.textContent='';loginButton.textContent='دخول';}
- const originalRoleEnter=window.enter;
  window.enter=function(){
   const n=norm(nameEl.value),p=phoneEl.value.trim();
   if(!n||!p){alert('أدخل الاسم ورقم الهاتف');return;}
@@ -1201,9 +1198,10 @@ try {
    if(!response.ok)throw Error(response.status===401?'بيانات الدخول غير صحيحة':'تعذّر التحقق من دخول الإدارة');
    const result=await response.json();
    if(!result.customToken||typeof window.raayaSecureAdminFirebaseLogin!=='function')throw Error('ربط Firebase غير جاهز');
-   await window.raayaSecureAdminFirebaseLogin(result.customToken);
-   person=name;role='admin';codeEl.value='';wrap.classList.add('hide');err.textContent='';
-   window.show('admin');
+   const verifiedUid=await window.raayaSecureAdminFirebaseLogin(result.customToken);
+   if(typeof window.raayaCompleteVerifiedAdminLogin!=='function')throw Error('توجيه الإدارة غير جاهز');
+   window.raayaCompleteVerifiedAdminLogin(verifiedUid);
+   codeEl.value='';wrap.classList.add('hide');err.textContent='';
   }catch(e){err.textContent=e.message||'تعذّر تسجيل الدخول';}
   finally{button.disabled=false;}
  };
@@ -1217,16 +1215,26 @@ try {
  if(applicantButton)applicantButton.textContent='إرسال طلب التوظيف';
 })();
 </script>
-<script>/* One navigation guard, without duplicating the app DOM. */
+<script>/* Role-aware Android/browser back: never cross from admin into client. */
 (function(){
   history.replaceState({raayaRoot:true},'',location.href);
   history.pushState({raayaGuard:true},'',location.href);
   window.addEventListener('popstate',function(e){
     e.stopImmediatePropagation();
+    const role=typeof window.raayaActiveRole==='function'?window.raayaActiveRole():null;
     const visible=[...document.querySelectorAll('main > section')].find(x=>!x.classList.contains('hide'));
     const id=visible?.id||'login';
-    const destination=id==='admin'?'admin':id==='staff'?'staff':id==='applicant'?'applicant':id==='login'?'login':id==='welcome'?'welcome':'client';
-    if(typeof window.show==='function')window.show(destination);
+    if(role==='admin'){
+      // The admin subpanel back action always returns to the admin menu.
+      if(typeof window.show==='function')window.show('admin');
+      if(typeof window.raayaAdminOpen==='function')window.raayaAdminOpen(null);
+    }else if(id==='login'){
+      if(typeof window.show==='function')window.show('login');
+    }else if(role==='staff'||role==='applicant'){
+      if(typeof window.show==='function')window.show(role==='staff'?'staff':'applicant');
+    }else if(role==='client'){
+      if(typeof window.show==='function')window.show('client');
+    }else if(typeof window.show==='function')window.show('login');
     history.pushState({raayaGuard:true},'',location.href);
   },true);
 })();</script><script>
