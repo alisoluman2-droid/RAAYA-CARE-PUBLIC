@@ -557,12 +557,13 @@ const status=document.getElementById('raayaCloudStatus');
 const say=t=>status.textContent=t;
 try {
  const cfg=JSON.parse(document.getElementById('raaya-firebase-config').textContent);
- const [{initializeApp,getApps},{getAuth,signInWithEmailAndPassword,signInAnonymously,signOut,onAuthStateChanged},{getDatabase,ref,set,get,onValue,update,runTransaction}]=await Promise.all([
+ const [{initializeApp,getApps},{getAuth,signInWithEmailAndPassword,signInAnonymously,signInWithCustomToken,signOut,onAuthStateChanged},{getDatabase,ref,set,get,onValue,update,runTransaction}]=await Promise.all([
  import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js'),
  import('https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js'),
  import('https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js')]);
  const app=getApps().find(a=>a.name==='raaya-care-cloud-test')||initializeApp(cfg,'raaya-care-cloud-test');
  const auth=getAuth(app),db=getDatabase(app);
+ window.raayaSecureAdminFirebaseLogin=async token=>{await signInWithCustomToken(auth,token);return auth.currentUser?.uid;};
  const current=()=>auth.currentUser;
  // Preview-only anonymous session. Do not impersonate the existing admin Firebase users.
  let anonymousPending=null;
@@ -1174,7 +1175,7 @@ try {
  loginButton.insertAdjacentElement('afterend',wrap);
  const norm=x=>String(x||'').normalize('NFKC').replace(/[\u064B-\u065F\u0670\u0640]/g,'').replace(/\s+/g,' ').trim();
  const admins=new Set(['علي سليمان','سمر النتشة']);
- const adminCode='516516';
+
  const codeEl=document.getElementById('raayaAdminCode'),err=document.getElementById('raayaAdminError');
  function resetCode(){wrap.classList.add('hide');codeEl.value='';err.textContent='';loginButton.textContent='دخول';}
  const originalRoleEnter=window.enter;
@@ -1187,13 +1188,24 @@ try {
   }
   resetCode();person=n;role='client';window.show('welcome');
  };
- document.getElementById('raayaAdminConfirm').onclick=function(){
-  if(!admins.has(norm(nameEl.value))||!phoneEl.value.trim()){resetCode();return;}
-  if(codeEl.value.trim()!==adminCode){err.textContent='رمز التأكيد غير صحيح';codeEl.value='';return;}
-  err.textContent='';wrap.classList.add('hide');person=norm(nameEl.value);role='admin';
-  // Existing role guard's selectedRole is private; its enter() is bypassed.
-  // Navigation still uses the existing dashboard and its original handlers.
-  originalRoleEnter();
+ document.getElementById('raayaAdminConfirm').onclick=async function(){
+  const name=norm(nameEl.value),phone=phoneEl.value.trim(),secret=codeEl.value.trim();
+  const who=name==='علي سليمان'?'ali':name==='سمر النتشة'?'samar':null;
+  if(!who||!phone||!secret){err.textContent='أدخل الاسم ورقم الهاتف والرمز';return;}
+  const button=this;button.disabled=true;err.textContent='جاري التحقق الآمن...';
+  try{
+   const response=await fetch('/.netlify/functions/admin-login',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({who,phone,secret})
+   });
+   if(!response.ok)throw Error(response.status===401?'بيانات الدخول غير صحيحة':'تعذّر التحقق من دخول الإدارة');
+   const result=await response.json();
+   if(!result.customToken||typeof window.raayaSecureAdminFirebaseLogin!=='function')throw Error('ربط Firebase غير جاهز');
+   await window.raayaSecureAdminFirebaseLogin(result.customToken);
+   person=name;role='admin';codeEl.value='';wrap.classList.add('hide');err.textContent='';
+   window.show('admin');
+  }catch(e){err.textContent=e.message||'تعذّر تسجيل الدخول';}
+  finally{button.disabled=false;}
  };
  const oldExit=window.raayaRoleExit;
  window.raayaRoleExit=function(){resetCode();return oldExit.apply(this,arguments);};
