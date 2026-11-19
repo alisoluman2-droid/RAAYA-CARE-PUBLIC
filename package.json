@@ -1,6 +1,5 @@
-
 {
-  "name": "raaya-care",
+  "name": "raaya-care-admin-login",
   "version": "1.0.0",
   "private": true,
   "dependencies": {
