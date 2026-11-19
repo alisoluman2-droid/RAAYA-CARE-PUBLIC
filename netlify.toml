@@ -1,0 +1,3 @@
+# Firebase Web API key is intentionally public; omit only this exact value from smart secret detection.
+[build.environment]
+SECRETS_SCAN_SMART_DETECTION_OMIT_VALUES = "AIzaSyBbiBnPNsIJls6SeqyrcVV4uLMQJOmLprc"
