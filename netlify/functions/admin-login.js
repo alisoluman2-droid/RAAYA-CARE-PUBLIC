@@ -7,7 +7,8 @@ function respond(statusCode, data) {
     statusCode,
     headers: {
       "Content-Type": "application/json",
-      "Cache-Control": "no-store"
+      "Cache-Control": "no-store",
+      "Pragma": "no-cache"
     },
     body: JSON.stringify(data)
   };
@@ -16,8 +17,10 @@ function respond(statusCode, data) {
 function equal(a, b) {
   const x = crypto.createHash("sha256")
     .update(String(a)).digest();
+
   const y = crypto.createHash("sha256")
     .update(String(b)).digest();
+
   return crypto.timingSafeEqual(x, y);
 }
 
@@ -29,9 +32,8 @@ function normalizePhone(value) {
     phone = phone.slice(2);
   }
 
-  if (phone.startsWith("970")) {
-    phone = "0" + phone.slice(3);
-  } else if (phone.startsWith("972")) {
+  if (phone.startsWith("970") ||
+      phone.startsWith("972")) {
     phone = "0" + phone.slice(3);
   }
 
@@ -39,6 +41,7 @@ function normalizePhone(value) {
 }
 
 exports.handler = async (event) => {
+
   if (event.httpMethod !== "POST") {
     return respond(405, {
       error: "Method not allowed"
@@ -46,9 +49,17 @@ exports.handler = async (event) => {
   }
 
   let input;
+
   try {
     input = JSON.parse(event.body || "{}");
   } catch {
+    return respond(400, {
+      error: "Invalid request"
+    });
+  }
+
+  if (!input || typeof input !== "object" ||
+      Array.isArray(input)) {
     return respond(400, {
       error: "Invalid request"
     });
@@ -71,13 +82,24 @@ exports.handler = async (event) => {
     });
   }
 
+  const normalizedPhone = normalizePhone(phone);
+
+  if (!/^0[0-9]{8,10}$/.test(normalizedPhone)) {
+    return respond(400, {
+      error: "Invalid phone"
+    });
+  }
+
   const prefix = who === "ali"
     ? "RAAYA_ALI"
     : "RAAYA_SAMAR";
 
   const expectedPhone =
     process.env[prefix + "_PHONE"];
-  const uid = process.env[prefix + "_UID"];
+
+  const uid =
+    process.env[prefix + "_UID"];
+
   const expectedSecret =
     process.env.RAAYA_ADMIN_SECRET;
 
@@ -88,7 +110,7 @@ exports.handler = async (event) => {
   }
 
   const phoneMatches = equal(
-    normalizePhone(phone),
+    normalizedPhone,
     normalizePhone(expectedPhone)
   );
 
@@ -104,7 +126,9 @@ exports.handler = async (event) => {
   }
 
   try {
+
     if (!admin.apps.length) {
+
       const json =
         process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
 
@@ -121,13 +145,26 @@ exports.handler = async (event) => {
       });
     }
 
-    await admin.auth().getUser(uid);
+    const user = await admin.auth().getUser(uid);
+
+    if (!user || user.disabled) {
+      return respond(403, {
+        error: "Account disabled"
+      });
+    }
 
     const customToken =
       await admin.auth().createCustomToken(uid);
 
-    return respond(200, { customToken });
-  } catch {
+    return respond(200, {
+      success: true,
+      customToken: customToken
+    });
+
+  } catch (error) {
+
+    console.error("RAAYA admin login error:", error.message);
+
     return respond(500, {
       error: "Login failed"
     });
