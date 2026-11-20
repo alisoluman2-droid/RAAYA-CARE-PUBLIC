@@ -91,7 +91,7 @@ function rejectCareRequest(id){
  if(!confirm('تأكيد رفض الطلب؟'))return;
  r.status='مرفوض من الإدارة';r.payment='لم يتم الدفع';put('requests',a);adminView();
 }
-function assignWorker(id){const a=get('requests');const r=a.find(x=>x.id===id);if(!r)return;const worker=prompt('اسم الموظف المكلّف');if(!worker)return;r.worker=worker;put('requests',a);adminView()}const oldAdminView=adminView;adminView=function(){oldAdminView();document.getElementById('adminRequests').innerHTML=get('requests').map(x=>'<div class="pill"><b>'+escapeHTML(x.name)+'</b> — '+names[lang][x.service]+'<p>'+escapeHTML(x.city)+' • '+escapeHTML(x.status)+' • '+escapeHTML(x.worker||'لا يوجد موظف')+'</p><button onclick="approveRequest('+x.id+')">موافقة وتحديد المبلغ</button><button onclick="assignWorker('+x.id+')">تعيين موظف</button></div>').join('')||'لا توجد طلبات';document.getElementById('adminJobs').innerHTML=get('jobs').map(x=>'<div class="pill">'+escapeHTML(x.name)+' — '+escapeHTML(x.phone)+' — '+escapeHTML(x.city)+' — '+escapeHTML(x.experience)+'</div>').join('')||'لا توجد طلبات توظيف'};myRequests=function(){document.getElementById('requestList').innerHTML=get('requests').filter(x=>x.client===person).map(x=>'<div class="pill"><b>'+escapeHTML(x.name)+'</b> — '+names[lang][x.service]+'<p>'+escapeHTML(x.city)+' • '+escapeHTML(x.status)+'</p>'+ (x.amount?'المبلغ: '+x.amount+' شيكل':'')+(x.worker?'<p>الموظف: '+escapeHTML(x.worker)+'</p>':'')+(x.status==='بانتظار الدفع'?'<button onclick="demoPay('+x.id+')">ادفع الآن بالفيزا (محاكاة فقط)</button>':'')+'</div>').join('')||'لا توجد طلبات';show('myrequests')};
+const oldAdminView=adminView;adminView=function(){oldAdminView();document.getElementById('adminRequests').innerHTML=get('requests').map(x=>'<div class="pill"><b>'+escapeHTML(x.name)+'</b> — '+names[lang][x.service]+'<p>'+escapeHTML(x.city)+' • '+escapeHTML(x.status)+' • '+escapeHTML(x.worker||'لا يوجد موظف')+'</p><button onclick="approveRequest('+x.id+')">موافقة وتحديد المبلغ</button><button onclick="assignWorker('+x.id+')">تعيين موظف</button></div>').join('')||'لا توجد طلبات';document.getElementById('adminJobs').innerHTML=get('jobs').map(x=>'<div class="pill">'+escapeHTML(x.name)+' — '+escapeHTML(x.phone)+' — '+escapeHTML(x.city)+' — '+escapeHTML(x.experience)+'</div>').join('')||'لا توجد طلبات توظيف'};myRequests=function(){document.getElementById('requestList').innerHTML=get('requests').filter(x=>x.client===person).map(x=>'<div class="pill"><b>'+escapeHTML(x.name)+'</b> — '+names[lang][x.service]+'<p>'+escapeHTML(x.city)+' • '+escapeHTML(x.status)+'</p>'+ (x.amount?'المبلغ: '+x.amount+' شيكل':'')+(x.worker?'<p>الموظف: '+escapeHTML(x.worker)+'</p>':'')+(x.status==='بانتظار الدفع'?'<button onclick="demoPay('+x.id+')">ادفع الآن بالفيزا (محاكاة فقط)</button>':'')+'</div>').join('')||'لا توجد طلبات';show('myrequests')};
 // Admin workflow repairs: local demonstration only.
 function updateHour(i,accepted){
  const a=get('hours'); if(!a[i])return;
@@ -521,11 +521,11 @@ const update=(state,message)=>{if(el){el.dataset.state=state;el.textContent=mess
 try {
  const config=JSON.parse(document.getElementById('raaya-firebase-config').textContent);
  if(!config.databaseURL) throw Error('databaseURL missing');
- const [{initializeApp},{getDatabase,ref,onValue}]=await Promise.all([
+ const [{initializeApp,getApps},{getDatabase,ref,onValue}]=await Promise.all([
   import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js'),
   import('https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js')
  ]);
- const app=initializeApp(config);
+ const app=getApps().find(a=>a.name==='[DEFAULT]')||initializeApp(config);
  const db=getDatabase(app);
  window.raayaFirebaseApp=app;
  window.raayaFirebaseDatabase=db;
@@ -557,11 +557,11 @@ const status=document.getElementById('raayaCloudStatus');
 const say=t=>status.textContent=t;
 try {
  const cfg=JSON.parse(document.getElementById('raaya-firebase-config').textContent);
- const [{initializeApp,getApps},{getAuth,signInWithEmailAndPassword,signInAnonymously,signOut,onAuthStateChanged},{getDatabase,ref,set,get,onValue,update,runTransaction}]=await Promise.all([
- import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js'),
+ const {initializeApp,getApps}=await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js');
+ const app=getApps().find(a=>a.name==='[DEFAULT]')||initializeApp(cfg);
+ const [{getAuth,signInWithEmailAndPassword,signInAnonymously,signOut,onAuthStateChanged},{getDatabase,ref,set,get,onValue,update,runTransaction}]=await Promise.all([
  import('https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js'),
  import('https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js')]);
- const app=getApps().find(a=>a.name==='[DEFAULT]')||initializeApp(cfg);
  const auth=getAuth(app),db=getDatabase(app);
  const current=()=>auth.currentUser;
  // Preview-only anonymous session. Do not impersonate the existing admin Firebase users.
@@ -1112,6 +1112,7 @@ try {
  function home(){return selectedRole==='staff'?'staff':selectedRole==='applicant'?'applicant':selectedRole==='admin'?'admin':'client';}
  window.show=function(id){
   if(id==='login'){selectedRole=null;return originalShow('login');}
+  if(window.raayaVerifiedAdminSession===true && id==='admin')selectedRole='admin';
   if(selectedRole && id!=='login' && !allowedScreens[selectedRole].has(id))id=home();
   return originalShow(id);
  };
@@ -1121,7 +1122,7 @@ try {
   if(!n||!phone){alert('أدخل الاسم ورقم الهاتف');return;}
   person=n;selectedRole=null;role='client';
   if(window.isDemoAdmin()){
-   selectedRole='admin';window.show('admin');
+   window.show('login');
   }else window.show('welcome');
  };
  const originalLogin=window.login;
@@ -1131,7 +1132,7 @@ try {
   selectedRole=r;return originalLogin(r);
  };
  window.raayaRoleExit=function(){
-  selectedRole=null;person='';role='client';demoOtp='';
+  selectedRole=null;window.raayaVerifiedAdminSession=false;person='';role='client';demoOtp='';
   if(typeof raayaPreviousScreens!=='undefined')raayaPreviousScreens.length=0;
   document.getElementById('loginName').value='';document.getElementById('loginPhone').value='';
   window.show('login');
@@ -1194,26 +1195,27 @@ try {
   if(!secret){err.textContent='أدخل رمز الإدارة';return;}
   const button=this;button.disabled=true;err.textContent='جاري التحقق...';
   try{
+   if(location.protocol!=='https:' && location.hostname!=='localhost') throw Error('الدخول الإداري يعمل من رابط Netlify المنشور فقط، وليس من ملف التنزيلات.');
    const response=await fetch('/.netlify/functions/admin-login',{
     method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({who,phone:phoneEl.value.trim(),secret})
    });
-   if(!response.ok)throw Error(response.status===401?'الرقم أو الرمز غير صحيح':'تعذر التحقق من الإدارة');
+   if(!response.ok)throw Error(response.status===401?'الرقم أو الرمز غير صحيح':response.status===404?'دالة admin-login غير منشورة على هذا الموقع':'تعذر التحقق من الإدارة (HTTP '+response.status+')');
    const data=await response.json();
-   if(!data.customToken)throw Error('لم يصل رمز مصادقة Firebase');
-   const [{getApps,getApp,initializeApp},{getAuth,signInWithCustomToken}]=await Promise.all([
-    import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js'),
-    import('https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js')
-   ]);
+   if(!data.customToken)throw Error('خدمة الدخول لم ترسل رمز Firebase. يلزم مراجعة دالة Netlify.');
+   const {getApps,initializeApp}=await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js');
    const config=JSON.parse(document.getElementById('raaya-firebase-config').textContent);
    const app=getApps().find(a=>a.name==='[DEFAULT]')||initializeApp(config);
-   await signInWithCustomToken(getAuth(app),data.customToken);
+   const {getAuth,signInWithCustomToken}=await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js');
+   const adminAuth=getAuth(app);
+   await signInWithCustomToken(adminAuth,data.customToken);
    err.textContent='';wrap.classList.add('hide');codeEl.value='';
    person=norm(nameEl.value);role='admin';
+   window.raayaVerifiedAdminSession=true;
    window.show('admin');
    if(typeof window.raayaAdminOpen==='function')window.raayaAdminOpen(null);
    if(typeof raayaPreviousScreens!=='undefined')raayaPreviousScreens.length=0;
-  }catch(e){err.textContent=e.message||'تعذر تسجيل الدخول';}
+  }catch(e){err.textContent=e instanceof TypeError && /fetch/i.test(e.message)?'تعذر الاتصال بدالة Netlify. تأكد من نشر الدالة وعمل الاتصال من الموقع.':(e.message||'تعذر تسجيل الدخول');}
   finally{button.disabled=false;}
  };
  const oldExit=window.raayaRoleExit;
