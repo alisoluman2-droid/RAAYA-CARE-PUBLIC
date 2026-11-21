@@ -1865,4 +1865,96 @@ body:has(#login:not(.hide)) #raayaSamarCredit {display:none!important}
  }
 })();
 </script>
+
+<style id="raaya-21nov-verified-navigation-css">
+/* The original credit-only-welcome selector was overridden by other rules. */
+body:has(#welcome:not(.hide)) #raayaSamarCredit{display:block!important}
+body:has(#login:not(.hide)) #raayaSamarCredit{display:none!important}
+#raayaAdminPanel_payrollRecords:not([hidden]){display:block!important}
+</style>
+<script id="raaya-21nov-stable-repair">
+(function(){
+ 'use strict';
+ const admin=document.getElementById('admin'),menu=document.getElementById('raayaAdminMenu');
+ if(!admin||!menu)return;
+ const norm=t=>String(t||'').replace(/\s+/g,' ').trim();
+ function adminBack(){if(typeof window.raayaAdminOpen==='function')window.raayaAdminOpen(null);menu.hidden=false;}
+ function fixExit(panel){if(!panel)return;panel.querySelectorAll('button').forEach(b=>{if(['خروج','Exit','יציאה'].includes(norm(b.textContent)))b.remove()});}
+ function openPayroll(){
+  const panel=document.getElementById('raayaAdminPanel_payrollRecords');if(!panel)return;
+  if(typeof window.raayaAdminOpen==='function')window.raayaAdminOpen(null);
+  menu.hidden=true;
+  admin.querySelectorAll('.raaya-admin-panel').forEach(p=>p.hidden=true);
+  panel.hidden=false;
+  let content=document.getElementById('raayaPayrollAdmin');
+  if(!content){content=document.createElement('div');content.id='raayaPayrollAdmin';panel.appendChild(content)}
+  else if(content.parentNode!==panel)panel.appendChild(content);
+  content.hidden=false;
+  try{if(typeof raayaPayroll==='function')raayaPayroll()}catch(e){console.error('Payroll view',e);content.textContent='تعذر تحميل السجل، يرجى إعادة المحاولة.'}
+  if(!norm(content.textContent))content.textContent='لا توجد سجلات ساعات عمل أو رواتب حالياً.';
+ }
+ function repair(){
+  ['workers','visits'].forEach(key=>fixExit(document.getElementById('raayaAdminPanel_'+key)));
+  let panel=document.getElementById('raayaAdminPanel_payrollRecords');
+  if(!panel){panel=document.createElement('div');panel.id='raayaAdminPanel_payrollRecords';panel.className='raaya-admin-panel';panel.hidden=true;admin.appendChild(panel)}
+  if(!panel.querySelector('[data-raaya-payroll-back]')){const back=document.createElement('button');back.type='button';back.className='secondary';back.dataset.raayaPayrollBack='1';back.textContent='رجوع إلى لوحة الإدارة';back.onclick=()=>{panel.hidden=true;adminBack()};panel.prepend(back)}
+  const buttons=[...menu.querySelectorAll('button')].filter(b=>/سجل ساعات العمل والرواتب|Work hours and payroll record|רישום שעות/.test(norm(b.textContent)));
+  buttons.forEach((b,i)=>{if(i){b.hidden=true;return}b.hidden=false;b.onclick=openPayroll});
+ }
+ // Delegated event: the admin menu is reconstructed after Firebase data loads.
+ menu.addEventListener('click',e=>{const b=e.target.closest('button');if(b&&/سجل ساعات العمل والرواتب|Work hours and payroll record|רישום שעות/.test(norm(b.textContent))){e.preventDefault();e.stopImmediatePropagation();openPayroll()}},true);
+ repair();
+ const original=window.adminView;
+ if(typeof original==='function')window.adminView=function(){const result=original.apply(this,arguments);repair();return result};
+
+})();
+</script>
+
+<style id="raaya-final-payroll-visibility">
+#raayaAdminPanel_payrollRecords:not([hidden]),#raayaAdminPanel_payrollRecords:not([hidden]) #raayaPayrollAdmin{display:block!important}
+#raayaAdminPanel_payrollRecords[hidden]{display:none!important}
+</style>
+<script id="raaya-final-admin-interaction">
+(function(){
+ const menu=document.getElementById('raayaAdminMenu');
+ const admin=document.getElementById('admin');
+ if(!menu||!admin)return;
+ function back(){if(typeof window.raayaAdminOpen==='function')window.raayaAdminOpen(null);menu.hidden=false;}
+ function cleanup(){
+  ['workers','visits'].forEach(key=>{
+   const panel=document.getElementById('raayaAdminPanel_'+key);
+   if(!panel)return;
+   [...panel.querySelectorAll('button')].filter(b=>/^(خروج|Exit|יציאה)$/.test(b.textContent.trim())).forEach(b=>b.remove());
+   if(![...panel.querySelectorAll('button')].some(b=>/رجوع إلى لوحة الإدارة|Back to admin|חזרה ללוח/.test(b.textContent))){
+    const b=document.createElement('button');b.type='button';b.className='secondary';b.textContent='رجوع إلى لوحة الإدارة';b.onclick=back;panel.prepend(b);
+   }
+  });
+ }
+ function payroll(){
+  let panel=document.getElementById('raayaAdminPanel_payrollRecords');
+  if(!panel){panel=document.createElement('div');panel.id='raayaAdminPanel_payrollRecords';panel.className='raaya-admin-panel';admin.appendChild(panel)}
+  if(typeof window.raayaAdminOpen==='function')window.raayaAdminOpen(null);
+  menu.hidden=true;
+  admin.querySelectorAll('.raaya-admin-panel').forEach(p=>p.hidden=true);
+  panel.hidden=false;
+  let content=document.getElementById('raayaPayrollAdmin');
+  if(!content){content=document.createElement('div');content.id='raayaPayrollAdmin';panel.appendChild(content)}
+  else panel.appendChild(content);
+  content.hidden=false;
+  if(typeof window.raayaPayroll==='function'){try{window.raayaPayroll()}catch(e){console.error(e)}}
+  if(!content.textContent.trim())content.textContent='لا توجد سجلات ساعات عمل أو رواتب حالياً.';
+  if(!panel.querySelector('[data-raaya-final-back]')){
+   const b=document.createElement('button');b.type='button';b.className='secondary';b.dataset.raayaFinalBack='1';b.textContent='رجوع إلى لوحة الإدارة';b.onclick=()=>{panel.hidden=true;back()};panel.prepend(b);
+  }
+ }
+ menu.addEventListener('click',function(e){
+  const b=e.target.closest('button');if(!b)return;
+  if(/سجل ساعات العمل والرواتب|Work hours and payroll record|רישום שעות/.test(b.textContent)){
+   e.preventDefault();e.stopImmediatePropagation();payroll();
+  }
+ },true);
+ const observer=new MutationObserver(()=>{if(!admin.__raayaCleanupBusy){admin.__raayaCleanupBusy=true;cleanup();admin.__raayaCleanupBusy=false}});
+ observer.observe(admin,{childList:true,subtree:true});cleanup();
+})();
+</script>
 </body></html>
