@@ -1799,4 +1799,70 @@ body:has(#welcome:not(.hide)) #raayaSamarCredit {display:block}
   reconcile();
 })();
 </script>
+
+<style id="raaya-21nov-followup-fixes">
+/* Show the management credit on the public landing screen, never on login. */
+body:has(#welcome:not(.hide)):not(:has(#login:not(.hide))) #raayaSamarCredit {display:block!important}
+body:has(#login:not(.hide)) #raayaSamarCredit {display:none!important}
+/* Hidden panels must not leak into other admin screens. */
+#raayaAdminPanel_workers[hidden],#raayaAdminPanel_visits[hidden],#raayaAdminPanel_payrollRecords[hidden]{display:none!important}
+</style>
+<script id="raaya-21nov-followup-navigation-fixes">
+(function(){
+ 'use strict';
+ const menu=document.getElementById('raayaAdminMenu');
+ const admin=document.getElementById('admin');
+ if(!menu||!admin)return;
+ const normalize=s=>String(s||'').replace(/\s+/g,' ').trim();
+ function removeExitButtons(panel){
+   if(!panel)return;
+   panel.querySelectorAll('button').forEach(b=>{
+     const label=normalize(b.textContent);
+     if(label==='خروج'||label==='Exit'||label==='יציאה')b.remove();
+   });
+ }
+ function ensureBack(panel){
+   if(!panel)return;
+   removeExitButtons(panel);
+   const backs=[...panel.querySelectorAll('button')].filter(b=>/رجوع إلى لوحة الإدارة|Back to admin|חזרה ללוח/.test(b.textContent));
+   if(!backs.length){
+     const b=document.createElement('button');b.type='button';b.className='secondary';
+     b.textContent='رجوع إلى لوحة الإدارة';b.onclick=()=>window.raayaAdminOpen(null);
+     panel.prepend(b);
+   }
+ }
+ ['workers','visits'].forEach(key=>ensureBack(document.getElementById('raayaAdminPanel_'+key)));
+ const label='سجل ساعات العمل والرواتب';
+ const buttons=[...menu.querySelectorAll('button')].filter(b=>normalize(b.textContent)===label);
+ if(buttons.length){
+   const button=buttons[0];
+   let panel=document.getElementById('raayaAdminPanel_payrollRecords');
+   if(!panel){
+     panel=document.createElement('div');panel.id='raayaAdminPanel_payrollRecords';
+     panel.className='raaya-admin-panel';panel.hidden=true;admin.appendChild(panel);
+   }
+   const content=document.getElementById('raayaPayrollAdmin');
+   if(content){panel.appendChild(content);content.hidden=false;}
+   ensureBack(panel);
+   button.onclick=function(){
+     if(typeof window.raayaAdminOpen==='function')window.raayaAdminOpen(null);
+     menu.hidden=true;
+     admin.querySelectorAll('.raaya-admin-panel').forEach(p=>p.hidden=true);
+     panel.hidden=false;
+     if(content){
+       content.hidden=false;
+       try{if(typeof raayaPayroll==='function')raayaPayroll();}
+       catch(e){content.textContent='تعذر تحميل سجلات الساعات والرواتب.';}
+       if(!content.textContent.trim())content.textContent='لا توجد سجلات ساعات عمل أو رواتب حالياً.';
+     }
+   };
+   const original=window.raayaAdminOpen;
+   if(typeof original==='function')window.raayaAdminOpen=function(key){
+     const result=original.apply(this,arguments);
+     if(key!=='payrollRecords')panel.hidden=true;
+     return result;
+   };
+ }
+})();
+</script>
 </body></html>
