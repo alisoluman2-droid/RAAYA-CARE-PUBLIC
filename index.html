@@ -2092,4 +2092,62 @@ body:has(#welcome:not(.hide)) #raayaSamarCredit{display:block!important;visibili
  fix();
 })();
 </script>
+<style id="raaya-21nov-credit-visibility-verified">
+/* Credit is a site heading caption, not an account-login element. */
+#raayaSamarCredit {display:block!important;position:relative!important;visibility:visible!important;text-align:center!important;color:#b91c1c!important;font-weight:800!important;font-size:19px!important;margin:12px auto!important;padding:0 12px!important}
+body:has(#login:not(.hide)) #raayaSamarCredit {display:none!important}
+</style>
+<script id="raaya-21nov-session-navigation-fix">
+(function(){
+ 'use strict';
+ const KEY='raaya_active_view_v2', PANELKEY='raaya_active_admin_panel_v3';
+ const panelIds=['workers','visits','payrollRecords'];
+ function activePanel(){return panelIds.find(k=>{const e=document.getElementById('raayaAdminPanel_'+k);return e&&!e.hidden})||null}
+ function savePanel(){try{const p=activePanel();if(p)sessionStorage.setItem(PANELKEY,p);else sessionStorage.removeItem(PANELKEY)}catch(e){}}
+ function restorePanel(){try{const k=sessionStorage.getItem(PANELKEY);if(!panelIds.includes(k))return;
+   if(typeof window.raayaAdminOpen==='function')window.raayaAdminOpen(k);
+   else {const b=document.querySelector('[data-raaya-admin-open="'+k+'"]');if(b)b.click()}
+ }catch(e){console.warn('RAAYA panel restore',e)}}
+ // The existing session restorer restores the admin dashboard first; restore the actual subpage afterwards.
+ const originalOpen=window.raayaAdminOpen;
+ if(typeof originalOpen==='function')window.raayaAdminOpen=function(key){
+   const result=originalOpen.apply(this,arguments);
+   if(key===null || key===undefined){if(!sessionStorage.getItem(PANELKEY))savePanel()}
+   else savePanel();
+   return result;
+ };
+ const originalExit=window.raayaRoleExit;
+ if(typeof originalExit==='function')window.raayaRoleExit=function(){sessionStorage.removeItem(PANELKEY);return originalExit.apply(this,arguments)};
+ document.addEventListener('click',e=>{
+   const button=e.target.closest('button');if(!button)return;
+   if(button.dataset.k==='exit' || button.textContent.trim()==='خروج'){
+     // Only clear on a real explicit exit, not on reload or initial screen rendering.
+     sessionStorage.removeItem(PANELKEY);
+   }else if(document.getElementById('admin')?.contains(button))setTimeout(savePanel,30);
+ },true);
+ // Wait for the existing Firebase session restore, then reopen the saved subpage.
+ let count=0;
+ const timer=setInterval(()=>{
+   if(++count>100){clearInterval(timer);return}
+   const admin=document.getElementById('admin');
+   if(admin&&!admin.classList.contains('hide')&&sessionStorage.getItem(PANELKEY)){
+     clearInterval(timer);restorePanel();
+   }
+ },100);
+})();
+</script>
+<style id="raaya-samar-credit-all-pages-final">
+/* Approved: credit directly below the photo on every app screen, including login. */
+html body #raayaSamarCredit,
+html body:has(#login:not(.hide)) #raayaSamarCredit,
+html body:has(#welcome:not(.hide)) #raayaSamarCredit,
+html body:has(#admin:not(.hide)) #raayaSamarCredit,
+html body:has(#client:not(.hide)) #raayaSamarCredit,
+html body:has(#staff:not(.hide)) #raayaSamarCredit {
+ display:block!important; visibility:visible!important; opacity:1!important;
+ position:relative!important; text-align:center!important;
+ color:#b91c1c!important; font-weight:800!important; font-size:19px!important;
+ margin:12px auto!important; padding:0 12px!important;
+}
+</style>
 </body></html>
