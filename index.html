@@ -1957,4 +1957,139 @@ body:has(#login:not(.hide)) #raayaSamarCredit{display:none!important}
  observer.observe(admin,{childList:true,subtree:true});cleanup();
 })();
 </script>
+
+<style id="raaya-21nov-targeted-admin-fix">
+/* Hide the admin-level Exit only while a subpage is displayed. */
+#admin:has(#raayaAdminPanel_workers:not([hidden])) > .top > button[data-k="exit"],
+#admin:has(#raayaAdminPanel_visits:not([hidden])) > .top > button[data-k="exit"],
+#admin:has(#raayaAdminPanel_payrollRecords:not([hidden])) > .top > button[data-k="exit"]{display:none!important}
+/* The credit belongs to the landing screen and must not be suppressed by older styles. */
+body:has(#welcome:not(.hide)) #raayaSamarCredit{display:block!important;visibility:visible!important}
+</style>
+<script id="raaya-21nov-targeted-admin-back">
+(function(){
+ const admin=document.getElementById('admin');if(!admin)return;
+ const keys=['workers','visits','payrollRecords'];
+ function back(){
+   keys.forEach(k=>{const p=document.getElementById('raayaAdminPanel_'+k);if(p)p.hidden=true});
+   if(typeof window.raayaAdminOpen==='function')window.raayaAdminOpen(null);
+   const menu=document.getElementById('raayaAdminMenu');if(menu)menu.hidden=false;
+ }
+ let busy=false;
+ function fix(){
+   if(busy)return;busy=true;
+   try{keys.forEach(k=>{
+     const panel=document.getElementById('raayaAdminPanel_'+k);if(!panel)return;
+     // Remove exit buttons only in these three subpages, not from the admin dashboard.
+     panel.querySelectorAll('button').forEach(b=>{
+       if(/^(خروج|Exit|יציאה)$/.test(b.textContent.trim()))b.remove();
+     });
+     const backs=[...panel.querySelectorAll('button')].filter(b=>/رجوع إلى لوحة الإدارة|Back to admin|חזרה ללוח/.test(b.textContent));
+     if(!backs.length){const b=document.createElement('button');b.type='button';b.className='secondary';b.textContent='رجوع إلى لوحة الإدارة';panel.prepend(b);backs.push(b)}
+     backs.forEach((b,i)=>{if(i)b.remove();else b.onclick=function(e){e.preventDefault();back()}});
+   })}finally{busy=false}
+ }
+ new MutationObserver(fix).observe(admin,{childList:true,subtree:true});fix();
+})();
+</script>
+
+<script id="raaya-refresh-session-fix-21nov">
+/* Restore the last screen only for a session that has not explicitly logged out.
+   Admin restoration additionally requires a live Firebase authenticated user. */
+(function(){
+ const KEY='raaya_active_view_v2';
+ const valid=new Set(['welcome','client','services','form','confirmation','myrequests','contact','account','staff','applicant','admin']);
+ const staff=new Set(['staff']);
+ const applicant=new Set(['applicant']);
+ const admin=new Set(['admin']);
+ let restoring=false;
+ function read(){try{return JSON.parse(sessionStorage.getItem(KEY)||'null')}catch(e){return null}}
+ function clear(){sessionStorage.removeItem(KEY)}
+ const oldShow=window.show;
+ window.show=function(id){
+   const result=oldShow.apply(this,arguments);
+   if(id==='login'){clear();return result}
+   const section=document.getElementById(id);
+   if(!restoring && valid.has(id) && section && !section.classList.contains('hide') && typeof person==='string' && person.trim()){
+     const role=admin.has(id)?'admin':staff.has(id)?'staff':applicant.has(id)?'applicant':(read()?.role==='staff'?'staff':read()?.role==='applicant'?'applicant':'client');
+     try{sessionStorage.setItem(KEY,JSON.stringify({name:person,phone:document.getElementById('loginPhone')?.value||'',screen:id,role}))}catch(e){}
+   }
+   return result;
+ };
+ const oldExit=window.raayaRoleExit;
+ if(typeof oldExit==='function')window.raayaRoleExit=function(){clear();return oldExit.apply(this,arguments)};
+ async function restore(){
+   const state=read();if(!state||!valid.has(state.screen)||!state.name)return;
+   restoring=true;
+   try{
+     if(state.role==='admin'){
+       const {getApps,initializeApp}=await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js');
+       const {getAuth,authStateReady}=await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js');
+       const config=JSON.parse(document.getElementById('raaya-firebase-config').textContent);
+       const app=getApps().find(a=>a.name==='[DEFAULT]')||initializeApp(config);
+       const auth=getAuth(app);
+       if(typeof auth.authStateReady==='function')await auth.authStateReady();
+       else await new Promise(resolve=>{const off=auth.onAuthStateChanged(()=>{off();resolve()},()=>resolve())});
+       if(!auth.currentUser || auth.currentUser.isAnonymous){clear();return}
+       person=state.name;role='admin';window.raayaVerifiedAdminSession=true;
+       document.getElementById('loginName').value=state.name;
+       document.getElementById('loginPhone').value=state.phone||'';
+       window.show('admin');
+       if(typeof window.raayaAdminOpen==='function')window.raayaAdminOpen(null);
+     }else{
+       person=state.name;role=state.role==='staff'?'staff':'client';
+       document.getElementById('loginName').value=state.name;
+       document.getElementById('loginPhone').value=state.phone||'';
+       if(state.role==='staff'||state.role==='applicant'){
+         if(typeof window.login==='function')window.login(state.role);
+       }else window.show('welcome');
+       window.show(state.screen);
+     }
+   }catch(e){console.warn('RAAYA session restore:',e);if(state.role==='admin')clear()}
+   finally{restoring=false}
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',restore,{once:true});else restore();
+})();
+</script>
+
+<style id="raaya-final-unified-21nov">
+/* Only the agreed admin subpages: never alter the main dashboard exit. */
+#raayaAdminPanel_workers button[data-k="exit"],
+#raayaAdminPanel_visits button[data-k="exit"],
+#raayaAdminPanel_payrollRecords button[data-k="exit"]{display:none!important}
+/* Override earlier credit suppression only on the welcome screen. */
+body:has(#welcome:not(.hide)) #raayaSamarCredit{display:block!important;visibility:visible!important}
+</style>
+<script id="raaya-final-unified-navigation-21nov">
+(function(){
+ 'use strict';
+ const ids=['workers','visits','payrollRecords'];
+ const root=document.getElementById('admin');
+ if(!root)return;
+ let working=false;
+ function returnToDashboard(){
+   ids.forEach(k=>{const p=document.getElementById('raayaAdminPanel_'+k);if(p)p.hidden=true});
+   if(typeof window.raayaAdminOpen==='function')window.raayaAdminOpen(null);
+   const menu=document.getElementById('raayaAdminMenu');if(menu)menu.hidden=false;
+ }
+ function fix(){
+  if(working)return;working=true;
+  try{
+   ids.forEach(k=>{
+    const panel=document.getElementById('raayaAdminPanel_'+k);if(!panel)return;
+    [...panel.querySelectorAll('button')].forEach(b=>{
+     if(/^(خروج|Exit|יציאה)$/i.test(b.textContent.trim()))b.remove();
+    });
+    const backs=[...panel.querySelectorAll('button')].filter(b=>/رجوع إلى لوحة الإدارة|Back to admin|חזרה ללוח/.test(b.textContent));
+    let b=backs.shift();
+    backs.forEach(x=>x.remove());
+    if(!b){b=document.createElement('button');b.type='button';b.className='secondary';b.textContent='رجوع إلى لوحة الإدارة';panel.prepend(b)}
+    b.onclick=e=>{e.preventDefault();returnToDashboard()};
+   });
+  }finally{working=false}
+ }
+ new MutationObserver(fix).observe(root,{subtree:true,childList:true});
+ fix();
+})();
+</script>
 </body></html>
