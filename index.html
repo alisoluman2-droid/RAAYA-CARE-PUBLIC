@@ -684,7 +684,7 @@ try {
  sharedPanel.id='raayaSharedAdminFeed';
  sharedPanel.className='card';
  sharedPanel.style.cssText='direction:rtl;margin:12px 0;border:1px solid #b7d2e8';
- sharedPanel.innerHTML='<h3>طلبات Firebase المشتركة — إدارة تجريبية</h3><p>الموافقة والتعيين يحدّثان السجل المشترك فقط، بشرط سماح قواعد Firebase لصلاحية الإدارة. تصل تحديثات الإدارة لحساب العميل عند السماح بقراءتها في قواعد Firebase، ولا تُكتب فوق قرار الإدارة.</p><div id="raayaSharedAdminItems"></div><p id="raayaSharedActionStatus" role="status"></p>';
+ sharedPanel.innerHTML='<h3>طلبات الرعاية الواردة</h3><div id="raayaSharedAdminItems"></div><p id="raayaSharedActionStatus" role="status"></p>';
  const clean=t=>String(t??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const sharedActionStatus=t=>{const el=sharedPanel.querySelector('#raayaSharedActionStatus');if(el)el.textContent=t;};
  const sharedActions={};
