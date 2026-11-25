@@ -170,7 +170,7 @@ body:has(#login:not(.hide)) #raayaSamarCredit {display:none}
   console.error('RAAYA job submission:',e);
  }finally{if(btn)btn.disabled=false;}
 }
-function adminLogin(){alert('لوحة الإدارة معاينة تجريبية غير محمية. لا تستخدم بيانات حقيقية.');show('admin')};let raayaCurrentScreen='login',raayaPreviousScreens=[];function raayaBack(fallback){const target=raayaPreviousScreens.pop()||fallback||'client';raayaShowWithoutHistory=true;show(target)}let raayaShowWithoutHistory=false;function show(id){if(id==='login'){raayaPreviousScreens.length=0;raayaCurrentScreen='login';}if(id!=='login')document.body.classList.add('raaya-app-open');if(!raayaShowWithoutHistory&&id!==raayaCurrentScreen)raayaPreviousScreens.push(raayaCurrentScreen);raayaShowWithoutHistory=false;raayaCurrentScreen=id;if(id==='account'){document.getElementById('accountPerson').textContent=person;}if(id==='admin'&&!isDemoAdmin())return show('login');document.getElementById('bottomNav').style.display=(person && id==='admin')?'flex':'none';document.querySelectorAll('main section').forEach(s=>s.classList.add('hide'));document.getElementById(id).classList.remove('hide');if(id==='admin')adminView();if(id==='login'){requestAnimationFrame(()=>{const field=document.getElementById('loginName');if(field&&!field.disabled){field.readOnly=false;field.removeAttribute('inert');}})}window.scrollTo(0,0)}function isDemoAdmin(){return person.normalize('NFKC').replace(/[\u064B-\u065F\u0670\u0640]/g,'').replace(/\s+/g,' ').trim().replace(/^ادارة /,'إدارة ')==='إدارة رايا كير'}
+function adminLogin(){alert('لوحة الإدارة معاينة تجريبية غير محمية. لا تستخدم بيانات حقيقية.');show('admin')};let raayaCurrentScreen='login',raayaPreviousScreens=[];function raayaBack(fallback){const target=raayaPreviousScreens.pop()||fallback||'client';raayaShowWithoutHistory=true;show(target)}let raayaShowWithoutHistory=false;function show(id){if(id==='login'){raayaPreviousScreens.length=0;raayaCurrentScreen='login';}if(id!=='login')document.body.classList.add('raaya-app-open');if(!raayaShowWithoutHistory&&id!==raayaCurrentScreen)raayaPreviousScreens.push(raayaCurrentScreen);raayaShowWithoutHistory=false;raayaCurrentScreen=id;if(id==='account'){document.getElementById('accountPerson').textContent=person;}if(id==='admin'&&!isDemoAdmin())return show('login');document.getElementById('bottomNav').style.display=(person && id==='client')?'flex':'none';document.querySelectorAll('main > section').forEach(s=>s.classList.add('hide'));document.getElementById(id).classList.remove('hide');if(id==='admin')adminView();if(id==='login'){requestAnimationFrame(()=>{const field=document.getElementById('loginName');if(field&&!field.disabled){field.readOnly=false;field.removeAttribute('inert');}})}window.scrollTo(0,0)}function isDemoAdmin(){return person.normalize('NFKC').replace(/[\u064B-\u065F\u0670\u0640]/g,'').replace(/\s+/g,' ').trim().replace(/^ادارة /,'إدارة ')==='إدارة رايا كير'}
 function openAccount(){document.getElementById('accountPerson').textContent=person;const b=document.getElementById('adminAccountButton');if(b)b.classList.toggle('hide',!isDemoAdmin());show('account')}function setLang(l){const credit=document.getElementById('raayaSamarCredit');if(credit)credit.textContent=({ar:'بإدارة سمر النتشة',en:'Managed by Samar Al-Natsheh',he:'בניהולה של סמר אל-נטשה'})[l]||'بإدارة سمر النتشة';lang=l;document.querySelector('#gender option[value=male]').textContent=({ar:'ذكر',en:'Male',he:'זכר'})[l];document.querySelector('#gender option[value=female]').textContent=({ar:'أنثى',en:'Female',he:'נקבה'})[l];document.documentElement.lang=l;document.documentElement.dir=l==='en'?'ltr':'rtl';document.querySelectorAll('[data-k]').forEach(el=>{const k=el.dataset.k;if(l==='ar')return el.textContent=arWords[k]||el.textContent;el.textContent=words[l][k]||arWords[k]||el.textContent});document.getElementById('tag').textContent=l==='ar'?'رعاية واهتمام وطمأنينة':l==='en'?'Care, attention and peace of mind':'טיפול, תשומת לב ושקט נפשי';drawServices();document.getElementById('serviceTitle').textContent=names[l][service]}const arWords={};document.querySelectorAll('[data-k]').forEach(e=>arWords[e.dataset.k]=e.textContent);function login(r){role=r;if(r==='client')show('client');else if(r==='staff'){document.getElementById('staffName').textContent=person;show('staff');staffView()}else if(r==='applicant'){document.getElementById('jobName').value=person;document.getElementById('jobPhone').value=document.getElementById('loginPhone').value;show('applicant')}else show('admin')}
 function enter(){const n=document.getElementById('loginName').value.trim(),p=document.getElementById('loginPhone').value.trim();if(!n||!p)return alert('أدخل الاسم ورقم الهاتف');if(document.getElementById('otpCode').value.trim()!==demoOtp||!demoOtp)return alert('رمز التأكيد غير صحيح');person=n;show('welcome')}
 function drawServices(){document.getElementById('serviceGrid').innerHTML='';names[lang].forEach((n,i)=>{const b=document.createElement('button');b.innerHTML='<span aria-hidden="true" style="display:block;font-size:34px;margin-bottom:8px">'+['🏠','🏥','🤝','🩺','🌙','💊','🧹','💬'][i]+'</span><span>'+n+'</span>';b.onclick=()=>{service=i;document.getElementById('serviceTitle').textContent=n;document.getElementById('reqName').value=person;show('form')};document.getElementById('serviceGrid').appendChild(b)})}const get=(key)=>{try{const rows=JSON.parse(localStorage.getItem('raaya_nov7_clean_trial_20261107_'+key)||'[]');return key==='requests'&&Array.isArray(rows)?rows.filter(r=>!window.raayaIsRemovedDemoRequest?.(r)):rows}catch{return []}},put=(key,v)=>{const old=get(key);localStorage.setItem('raaya_nov7_clean_trial_20261107_'+key,JSON.stringify(v));if(window.raayaTrackChanges)window.raayaTrackChanges(key,old,v);if(window.raayaCloudSyncWrite)window.raayaCloudSyncWrite(key,v)};function validateAndSaveRequest(e){
@@ -452,7 +452,7 @@ function extra(r){return r.raayaVisit||{state:'pending'}}
 window.raayaVisitAction=function(id,action){let a=requests(),r=a.find(x=>String(x.id)===String(id));if(!r||!currentRequest(r))return;let v=extra(r);if(action==='start'&&v.state==='pending'){v={state:'start_wait',start:new Date().toISOString()};notify('client:'+r.client,'الموظف '+r.worker+' يطلب تأكيد بدء الزيارة');notify('admin','طلب تأكيد حضور: '+r.worker)}else if(action==='end'&&v.state==='active'){v.state='end_wait';v.end=new Date().toISOString();notify('client:'+r.client,'الموظف '+r.worker+' يطلب تأكيد انتهاء الزيارة');notify('admin','طلب تأكيد انصراف: '+r.worker)}else return;r.raayaVisit=v;write(a);staffView();refreshBell()};
 window.raayaConfirm=function(id,ok){let a=requests(),r=a.find(x=>String(x.id)===String(id));if(!r||!owned(r))return;let v=extra(r);if(!ok){v.review=true;notify('admin','زيارة تحتاج مراجعة: '+r.worker+' / '+r.name)}else if(v.state==='start_wait'){v.state='active';v.startConfirmed=new Date().toISOString();notify('staff:'+r.worker,'أكد العميل بداية الزيارة')}else if(v.state==='end_wait'){v.state='completed';v.endConfirmed=new Date().toISOString();v.hours=Math.max(0,(new Date(v.end)-new Date(v.start))/3600000);r.status='مكتملة';notify('staff:'+r.worker,'أكد العميل انتهاء الزيارة');notify('admin','اكتملت زيارة '+r.worker+'، ساعات العمل للمراجعة: '+v.hours.toFixed(2))}else return;r.raayaVisit=v;write(a);myRequests()};
 window.raayaRate=function(id){let a=requests(),r=a.find(x=>String(x.id)===String(id));if(!r||!owned(r)||extra(r).state!=='completed'||r.raayaRating)return;let form=document.getElementById('raayaRatingForm'+id);let score=Number(form?.querySelector('input[name="stars'+id+'"]:checked')?.value);if(!score)return alert('اختر من نجمة إلى خمس نجوم');r.raayaRating={stars:score,notes:form.querySelector('textarea').value.slice(0,1000),date:new Date().toISOString()};write(a);notify('admin','تقييم جديد للموظف '+r.worker+': '+score+' من 5');myRequests()};
-function visitStaff(){let el=document.getElementById('workerTasks');if(!el)return;el.innerHTML=requests().filter(currentRequest).filter((r,i,a)=>a.findIndex(x=>String(x.id)===String(r.id))===i).map(r=>{let v=extra(r);return '<div class="pill"><b>'+escapeHTML(r.name)+'</b> — '+escapeHTML(names[lang]?.[r.service]||'خدمة رعاية')+' — '+escapeHTML(raayaFormatVisitDate(r.date))+'<p>حالة الزيارة: '+escapeHTML(v.state==='pending'?'لم تبدأ':v.state==='start_wait'?'بانتظار تأكيد وصول العميل':v.state==='active'?'الزيارة جارية — تم تأكيد الوصول':v.state==='end_wait'?'بانتظار تأكيد العميل انتهاء الزيارة':'مكتملة')+'</p><div class="raaya-actions">'+(v.state==='pending'?'<button data-visit-id="'+escapeHTML(r.id)+'" data-action="start">بدأت الزيارة</button>':v.state==='active'?'<button data-visit-id="'+escapeHTML(r.id)+'" data-action="end">أنهيت الزيارة</button>':v.state==='start_wait'?'<p class="raaya-waiting">تم إرسال طلب تأكيد الوصول إلى العميل. افتح حساب العميل واضغط «تأكيد» حتى يتمكن الموظف من إنهاء الزيارة.</p>':v.state==='end_wait'?'<p class="raaya-waiting">تم إرسال طلب تأكيد انتهاء الزيارة إلى العميل.</p>':'')+'</div></div>'}).join('')||'لا توجد زيارات مسندة حالياً'}
+function visitStaff(){let el=document.getElementById('workerTasks');if(!el)return;el.innerHTML=(typeof requests==='function'?requests():get('requests')).filter(currentRequest).filter((r,i,a)=>a.findIndex(x=>String(x.id)===String(r.id))===i).map(r=>{let v=extra(r);return '<div class="pill"><b>'+escapeHTML(r.name)+'</b> — '+escapeHTML(names[lang]?.[r.service]||'خدمة رعاية')+' — '+escapeHTML(raayaFormatVisitDate(r.date))+'<p>حالة الزيارة: '+escapeHTML(v.state==='pending'?'لم تبدأ':v.state==='start_wait'?'بانتظار تأكيد وصول العميل':v.state==='active'?'الزيارة جارية — تم تأكيد الوصول':v.state==='end_wait'?'بانتظار تأكيد العميل انتهاء الزيارة':'مكتملة')+'</p><div class="raaya-actions">'+(v.state==='pending'?'<button data-visit-id="'+escapeHTML(r.id)+'" data-action="start">بدأت الزيارة</button>':v.state==='active'?'<button data-visit-id="'+escapeHTML(r.id)+'" data-action="end">أنهيت الزيارة</button>':v.state==='start_wait'?'<p class="raaya-waiting">تم إرسال طلب تأكيد الوصول إلى العميل. افتح حساب العميل واضغط «تأكيد» حتى يتمكن الموظف من إنهاء الزيارة.</p>':v.state==='end_wait'?'<p class="raaya-waiting">تم إرسال طلب تأكيد انتهاء الزيارة إلى العميل.</p>':'')+'</div></div>'}).join('')||'لا توجد زيارات مسندة حالياً'}
 document.addEventListener('click',e=>{let b=e.target.closest('[data-visit-id]');if(b)raayaVisitAction(b.dataset.visitId,b.dataset.action)});
 function visitClient(){let el=document.getElementById('requestList');if(!el)return;requests().filter(owned).forEach(r=>{let v=extra(r),box=document.createElement('div');box.className='pill';if(v.state==='start_wait'||v.state==='end_wait'){box.innerHTML='<b>تأكيد '+(v.state==='start_wait'?'بداية':'نهاية')+' الزيارة: '+escapeHTML(r.worker||'')+'</b><div class="raaya-actions"><button>تأكيد</button><button class="secondary">إرسال للمراجعة</button></div>';box.querySelectorAll('button')[0].onclick=()=>raayaConfirm(r.id,true);box.querySelectorAll('button')[1].onclick=()=>raayaConfirm(r.id,false);el.append(box)}if(v.state==='completed'&&r.worker){box=document.createElement('div');box.className='pill';if(r.raayaRating)box.textContent='تم إرسال التقييم';else {box.innerHTML='<b>تقييم الموظف: '+escapeHTML(r.worker)+'</b><form id="raayaRatingForm'+r.id+'"><div class="raaya-stars">'+[1,2,3,4,5].map(n=>'<label><input type="radio" name="stars'+r.id+'" value="'+n+'">'+n+'★</label>').join('')+'</div><textarea maxlength="1000" placeholder="ملاحظات (اختياري)"></textarea><button type="button">إرسال التقييم</button></form>';box.querySelector('button').onclick=()=>raayaRate(r.id)}el.append(box)}})}
 function adminExtra(){let el=document.getElementById('raayaEmployeeRecords');if(!el)return;let a=requests(),names=[...new Set([...a.map(x=>x.worker).filter(Boolean),...get('hours').map(x=>x.employee).filter(Boolean),...get('jobs').filter(x=>x.status==='مقبول').map(x=>x.name).filter(Boolean)])];el.innerHTML=names.map(n=>{let rr=a.filter(r=>r.worker===n),hh=get('hours').filter(h=>h.employee===n),worked=rr.filter(r=>extra(r).state==='completed'),sum=worked.reduce((s,r)=>s+(extra(r).hours||0),0)+hh.reduce((s,h)=>s+(Number(h.h)||0),0);return '<div class="pill"><b>'+escapeHTML(n)+'</b><p>الزيارات المكتملة: '+worked.length+' | الساعات المسجلة: '+sum.toFixed(2)+' (تشمل الساعات اليدوية)</p>'+rr.filter(r=>r.raayaRating).map(r=>'<p>التقييم: '+r.raayaRating.stars+'/5 — '+escapeHTML(r.raayaRating.notes||'بدون ملاحظات')+'</p>').join('')+'<p>الراتب المستحق: يحتاج اعتماد الإدارة وتحديد الأجر</p>'+rr.filter(r=>extra(r).review).map(r=>'<p>زيارة تحتاج مراجعة: '+escapeHTML(r.name)+'</p>').join('')+'</div>'}).join('')||'<p>لا يوجد موظفون مسجلون بعد.</p>'}
@@ -498,7 +498,7 @@ function raayaToggleStaffVisits(){
  if(btn)btn.setAttribute('aria-expanded',String(opening));
  if(opening){
    el.textContent='جاري عرض الزيارات…';
-   try{visitStaff();}catch(err){console.error('Visit display error',err);el.textContent='تعذر تحميل الزيارات. تحقق من اتصال البيانات وتسجيل الدخول ثم حاول مجدداً.';}
+   try{visitStaff();}catch(err){console.error('Visit display error',err);el.textContent='تعذر عرض الزيارات من البيانات المحلية. تحقق من تسجيل دخول الموظف ومزامنة Firebase.';}
  }
 }
 function raayaPayroll(){
@@ -2690,7 +2690,7 @@ window.raayaOpenSecureBank=async function(button){
  const el=(tag,txt)=>{const e=document.createElement(tag);if(txt!==undefined)e.textContent=txt;return e};
  const add=(parent,title)=>{if(!parent)return null;const btn=el('button',title);btn.type='button';const box=el('div');box.hidden=true;box.className='pill';btn.onclick=()=>{box.hidden=!box.hidden};parent.append(btn,box);return box};
  const employeeBox=add(document.getElementById('workerTasks'),'تذكيرات زياراتي');
- const clientBox=add(document.getElementById('myrequests'),'تذكيرات الرعاية');
+ const clientBox=add(document.getElementById('client'),'تذكيرات الرعاية');
  const adminBox=add(document.getElementById('admin'),'متابعة الزيارات والتذكيرات');
  let stop=()=>{},uid=null,seen=new Set();
  function toRows(data){return Object.entries(data||{}).flatMap(([owner,records])=>Object.entries(records||{}).map(([id,v])=>({...v,ownerUid:v?.ownerUid||owner,sourceId:id}))).filter(x=>x&&typeof x==='object')}
@@ -2741,8 +2741,8 @@ window.raayaOpenSecureBank=async function(button){
  const staff=document.getElementById('staff'),admin=document.getElementById('admin');if(!staff||!admin)return;
  const make=(parent,title,id)=>{
   const b=E('button',title);b.type='button';b.className='raaya-blue-action';
-  const p=E('section');p.className='pill';p.id=id;p.hidden=true;
-  b.onclick=()=>p.hidden=!p.hidden;parent.append(b,p);return p;
+  const p=E('section');p.className='pill';p.id=id;p.hidden=true;p.classList.remove('hide');
+  b.onclick=()=>{p.hidden=!p.hidden;p.style.display=p.hidden?'none':'block'};parent.append(b,p);return p;
  };
  const sp=make(staff,'إجازاتي','raayaLeavesStaffPanel');
  const ap=make(admin,'إدارة إجازات الموظفين','raayaLeavesAdminPanel');
@@ -2830,8 +2830,8 @@ window.raayaOpenSecureBank=async function(button){
  const app=getApps().find(x=>x.name==='[DEFAULT]')||initializeApp(cfg),auth=getAuth(app),db=getDatabase(app);
  const admins=new Set(['FZbVofv8lFWtjSXPDsIRngYmK8H3','I2m6vtkc0VX3xs3OWhbZ4vMg7SE3']);
  const E=(tag,t)=>{let e=document.createElement(tag);if(t!==undefined)e.textContent=t;return e};
- const panel=(parent,title,id)=>{const b=E('button',title),p=E('section');b.type='button';p.id=id;p.hidden=true;p.className='pill';b.onclick=()=>p.hidden=!p.hidden;parent.append(b,p);return p};
- const client=document.getElementById('myrequests'),admin=document.getElementById('admin');if(!client||!admin)return;
+ const panel=(parent,title,id)=>{const b=E('button',title),p=E('section');b.type='button';p.id=id;p.hidden=true;p.className='pill';b.onclick=()=>{p.hidden=!p.hidden;p.style.display=p.hidden?'none':'block'};parent.append(b,p);return p};
+ const client=document.getElementById('client'),admin=document.getElementById('admin');if(!client||!admin)return;
  const cp=panel(client,'فواتيري','raayaClientInvoices'),ap=panel(admin,'إدارة الفواتير','raayaAdminInvoices');
  const adminRequests=E('div'),adminInvoices=E('div'),clientInvoices=E('div'),msg=E('p');
  ap.append(E('h3','إصدار الفواتير'),msg,adminRequests,E('h3','الفواتير الصادرة'),adminInvoices);
@@ -2919,7 +2919,7 @@ window.raayaOpenSecureBank=async function(button){
  const E=(t,v)=>{const e=document.createElement(t);if(v!==undefined)e.textContent=v;return e};
  const button=E('button','تقارير الأرباح والمصاريف');button.type='button';
  const panel=E('section');panel.id='raayaFinancialReports';panel.className='pill';panel.hidden=true;
- button.onclick=()=>panel.hidden=!panel.hidden;parent.append(button,panel);
+ button.onclick=()=>{panel.hidden=!panel.hidden;panel.style.display=panel.hidden?'none':'block'};parent.append(button,panel);
  panel.append(E('h3','تقرير الإيرادات والمصاريف المسجلة'));
  const label=E('label','الشهر'),month=E('input');month.type='month';month.value=new Date().toISOString().slice(0,7);label.append(month);panel.append(label);
  const expenseForm=E('form');expenseForm.style.display='grid';expenseForm.style.gap='8px';
@@ -3041,17 +3041,84 @@ window.raayaOpenSecureBank=async function(button){
  });
 })().catch(()=>{});
 </script>
-<style>
-#raayaLeavesStaffPanel[hidden],#raayaLeavesAdminPanel[hidden],
-#raayaClientInvoices[hidden],#raayaAdminInvoices[hidden],
-#workerTasks[hidden]{display:none!important}
+
+
+<style id="raaya-admin-bank-single-location">
+#raayaAdminEmployeeBanks{display:none!important}
+#raayaEmployeeManagement:not([hidden]) #raayaAdminEmployeeBanks{display:block!important}
 </style>
-<script>
-document.addEventListener('DOMContentLoaded',()=>{
-  for(const id of ['raayaClientInvoices','raayaLeavesStaffPanel']){
-    const panel=document.getElementById(id);
-    if(panel)panel.setAttribute('aria-live','polite');
+
+<script id="raaya-employee-bank-management-section">
+(function(){
+ function mount(){
+  const admin=document.getElementById('admin');if(!admin)return;
+  let section=document.getElementById('raayaEmployeeManagement');
+  if(!section){
+   const button=document.createElement('button');
+   button.type='button';button.textContent='الحسابات البنكية للموظفين';
+   section=document.createElement('div');
+   section.id='raayaEmployeeManagement';section.className='pill';section.hidden=true;
+   button.addEventListener('click',()=>{
+    section.hidden=!section.hidden;
+    if(!section.hidden && window.raayaBankReady){} 
+   });
+   admin.append(button,section);
   }
-});
+  const bank=document.getElementById('raayaAdminEmployeeBanks');
+  if(bank&&bank.parentElement!==section)section.appendChild(bank);
+ }
+ document.addEventListener('DOMContentLoaded',mount);
+ const obs=new MutationObserver(mount);
+ obs.observe(document.documentElement,{childList:true,subtree:true});
+})();
+</script>
+
+
+<style id="raaya-client-staff-buttons-visibility">
+#raayaClientInvoices[hidden],#raayaLeavesStaffPanel[hidden],
+#raayaComplaintsClient[hidden],#raayaComplaintsAdmin[hidden]{display:none!important}
+#raayaClientInvoices:not([hidden]),#raayaLeavesStaffPanel:not([hidden]){display:block}
+</style>
+
+
+
+
+<script id="raaya-stage12-visible-feature-buttons">
+(function(){
+ const items=[
+  ['client','raayaClientComplaintShortcut','الشكاوى','raayaComplaintsClient','page'],
+  ['admin','raayaAdminComplaintShortcut','متابعة الشكاوى','raayaComplaintsAdmin','page'],
+  ['client','raayaClientInvoiceShortcut','الفواتير الإلكترونية','raayaClientInvoices','panel'],
+  ['admin','raayaAdminInvoiceShortcut','الفواتير الإلكترونية','raayaAdminInvoices','panel'],
+  ['staff','raayaStaffLeaveShortcut','إجازات الموظفين','raayaLeavesStaffPanel','panel'],
+  ['admin','raayaAdminLeaveShortcut','إجازات الموظفين','raayaLeavesAdminPanel','panel'],
+  ['admin','raayaAdminFinanceShortcut','الأرباح والمصاريف','raayaFinancialReports','panel']
+ ];
+ function install(){
+  for(const [parentId,id,label,target,mode] of items){
+   const parent=document.getElementById(parentId);
+   if(!parent||document.getElementById(id))continue;
+   const b=document.createElement('button');
+   b.type='button';b.id=id;b.textContent=label;
+   b.addEventListener('click',()=>{
+    const panel=document.getElementById(target);
+    if(!panel){alert('القسم قيد التحميل. حاول مرة أخرى.');return}
+    if(mode==='page'){
+     if(typeof window.show==='function')window.show(target);
+     else{document.querySelectorAll('main > section').forEach(e=>e.classList.add('hide'));panel.classList.remove('hide')}
+    }else{
+     panel.hidden=!panel.hidden;
+     panel.style.display=panel.hidden?'none':'block';
+     if(!panel.hidden)panel.scrollIntoView({block:'nearest',behavior:'smooth'});
+    }
+   });
+   const top=parent.querySelector(':scope > .top');
+   if(top)top.insertAdjacentElement('afterend',b);
+   else parent.prepend(b);
+  }
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);
+ else install();
+})();
 </script>
 </body></html>
