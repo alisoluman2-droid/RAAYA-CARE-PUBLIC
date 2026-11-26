@@ -1304,7 +1304,7 @@ window.raayaCloudSaveRequest=save;
 (function(){
  const originalShow=window.show;
  let selectedRole=null;
- const allowedScreens={client:new Set(['client','services','form','confirmation','myrequests','contact','account','raayaComplaintsClient']),staff:new Set(['staff']),applicant:new Set(['applicant']),admin:new Set(['admin'])};
+ const allowedScreens={client:new Set(['client','services','form','confirmation','myrequests','contact','account','raayaComplaintsClient']),staff:new Set(['staff']),applicant:new Set(['applicant']),admin:new Set(['admin','raayaComplaintsAdmin'])};
  const normalize=x=>String(x||'').normalize('NFKC').replace(/[\u064B-\u065F\u0670\u0640]/g,'').replace(/\s+/g,' ').trim();
  const adminNames=new Set(['علي سليمان','سمر النتشة']);
  window.isDemoAdmin=function(){return adminNames.has(normalize(person));};
@@ -2700,7 +2700,7 @@ window.raayaOpenSecureBank=async function(button){
  const add=(parent,title)=>{if(!parent)return null;if(parent.id==='client')return document.getElementById('raayaClientReminderPanel');const btn=el('button',title);btn.type='button';const box=el('div');box.hidden=true;box.className='pill';btn.onclick=()=>{box.hidden=!box.hidden};parent.append(btn,box);return box};
  const employeeBox=add(document.getElementById('workerTasks'),'تذكيرات زياراتي');
  const clientBox=add(document.getElementById('client'),'تذكيرات الرعاية');
- const adminBox=add(document.getElementById('admin'),'متابعة الزيارات والتذكيرات');
+ const adminBox=add(document.getElementById('admin'),'متابعة الزيارات والتذكيرات');if(adminBox)adminBox.id='raayaAdminVisitReminders';
  let stop=()=>{},uid=null,seen=new Set();
  function toRows(data){return Object.entries(data||{}).flatMap(([owner,records])=>Object.entries(records||{}).map(([id,v])=>({...v,ownerUid:v?.ownerUid||owner,sourceId:id}))).filter(x=>x&&typeof x==='object')}
  function dateOf(r){const raw=r.visitDate||r.date||r.scheduledDate;const time=r.visitTime||r.time||'00:00';if(!raw)return null;const d=new Date(String(raw).includes('T')?raw:String(raw)+'T'+String(time).slice(0,5)+':00');return Number.isNaN(d.getTime())?null:d}
@@ -3021,7 +3021,7 @@ window.raayaOpenSecureBank=async function(button){
  const parent=document.getElementById('admin');if(!parent)return;
  const E=(t,v)=>{const x=document.createElement(t);if(v!==undefined)x.textContent=v;return x};
  const btn=E('button','سجل إجراءات الإدارة'),panel=E('section');btn.type='button';panel.className='pill';panel.hidden=true;
- btn.onclick=()=>panel.hidden=!panel.hidden;parent.append(btn,panel);
+ panel.id='raayaAdminAuditPanel';btn.onclick=()=>panel.hidden=!panel.hidden;parent.append(btn,panel);
  panel.append(E('h3','سجل إجراءات الإدارة'));
  const search=E('input');search.placeholder='بحث باسم المدير أو المرجع أو العملية';
  const filter=E('select');for(const [v,t] of [['','كل الإجراءات'],['invoice_issued','إصدار فاتورة'],['expense_added','تسجيل مصروف']]){const o=E('option',t);o.value=v;filter.append(o)}
@@ -3122,9 +3122,20 @@ for(const [key,label,id] of specs){
  let b=[...menu.querySelectorAll('button')].find(x=>x.textContent.trim()===label);if(!b){b=document.createElement('button');b.type='button';b.className='raaya-admin-menu-button';b.textContent=label;menu.append(b);}
  b.onclick=()=>{window.raayaAdminOpen(null);menu.hidden=true;active=key;p.hidden=false;if(key==='salary'){const legacy=document.getElementById('raayaAdminPanel_salary');if(legacy){legacy.hidden=false;try{window.renderSalary?.()}catch(e){console.error(e)}}}sync();};
 }
-function sync(){for(const [key,label,id] of specs){const p=panels[key],n=document.getElementById(id);if(n&&(key!=='daily'||admin.contains(n))){if(n.parentNode!==p)p.append(n);n.hidden=false;p.children[1].hidden=true;}else p.children[1].hidden=false;}}
+function sync(){for(const [key,label,id] of specs){const p=panels[key],n=document.getElementById(id);if(n&&(key!=='daily'||admin.contains(n))){if(n.closest('[data-final-admin-slot]'))continue;if(n.parentNode!==p)p.append(n);n.hidden=false;p.children[1].hidden=true;}else p.children[1].hidden=false;}}
 const complaint=document.getElementById('raayaComplaintAdminButton');if(complaint){menu.append(complaint);complaint.className='raaya-admin-menu-button';complaint.textContent='الشكاوى';}
 function dedup(){if(complaint)admin.querySelectorAll('button').forEach(b=>{if(b!==complaint&&/^(الشكاوى|استقبال الشكاوى)$/.test(b.textContent.trim()))b.remove()});sync();}
 new MutationObserver(dedup).observe(admin,{childList:true,subtree:true});dedup();
 const visits=staff?.querySelector('[data-k="visits"]'),tasks=document.getElementById('workerTasks');if(visits&&tasks){visits.after(tasks);visits.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();window.raayaToggleStaffVisits();},true);}
+})();</script><script id="raaya-admin-order-final">
+(()=>{
+const a=document.getElementById('admin'),m=document.getElementById('raayaAdminMenu');if(!a||!m)return;
+const specs=[['requests','الطلبات','raayaAdminPanel_requests'],['tracking','متابعة الزيارات','raayaAdminVisitReminders'],['daily','تقارير الرعاية اليومية','raayaDailyReportsPanel'],['subscriptions','الاشتراكات الشهرية','raayaSubscriptionAdmin'],['payments','مدفوعات العملاء','raayaAdminPanel_payments'],['invoices','الفواتير الإلكترونية','raayaAdminInvoices'],['finance','الأرباح والمصاريف','raayaFinancialReports'],['hours','ساعات العمل','raayaAdminPanel_hours'],['salary','الرواتب الشهرية','raayaAdminPanel_salary'],['jobs','طلبات التوظيف','raayaAdminPanel_jobs'],['workers','إدارة الموظفين','raayaAdminPanel_workers'],['leave','إجازات الموظفين','raayaLeavesAdminPanel'],['visits','سجل الموظفين','raayaAdminPanel_visits'],['complaints','الشكاوى','raayaComplaintsAdmin'],['bank','الحساب البنكي للشركة','raayaAdminPanel_bank'],['audit','سجل إجراءات الإدارة','raayaAdminAuditPanel']];
+const prior=window.raayaAdminOpen;let active=null;const slots={};
+for(const [k,label,id] of specs){let b=k==='complaints'?document.getElementById('raayaComplaintAdminButton'):null;if(!b)b=document.createElement('button');b.type='button';b.className='raaya-admin-menu-button';b.textContent=label;b.dataset.finalAdminKey=k; m.append(b);const p=document.createElement('div');p.className='raaya-admin-panel';p.hidden=true;p.dataset.finalAdminSlot=k;const back=document.createElement('button');back.type='button';back.className='secondary';back.textContent='رجوع إلى لوحة الإدارة';back.onclick=()=>window.raayaAdminOpen(null);p.append(back);a.append(p);slots[k]=p;}
+function reconcile(){for(const b of m.querySelectorAll('button'))if(!b.dataset.finalAdminKey)b.hidden=true;for(const [k,label,id] of specs){const n=document.getElementById(id),p=slots[k];if(n&&n!==p){if(n.parentNode!==p)p.append(n);n.hidden=false;n.classList.remove('hide');n.style.display='';for(const b of n.querySelectorAll('button'))if(b.textContent.trim()==='رجوع إلى لوحة الإدارة')b.hidden=true;}p.hidden=active!==k;}for(const n of a.children){if(n===m||n.dataset.finalAdminSlot||n.classList.contains('top')||n.tagName==='H2')continue;n.hidden=true;}m.hidden=!!active;}
+window.raayaAdminOpen=function(k){active=specs.some(x=>x[0]===k)?k:null;try{prior?.call(this,k==='complaints'?null:k)}finally{reconcile()}};
+m.addEventListener('click',e=>{const b=e.target.closest('[data-final-admin-key]');if(!b)return;e.preventDefault();e.stopImmediatePropagation();window.raayaAdminOpen(b.dataset.finalAdminKey)},true);
+// Complaint content is now nested inside the authenticated administration screen.
+new MutationObserver(reconcile).observe(a,{childList:true,subtree:true});reconcile();
 })();</script></body></html>
