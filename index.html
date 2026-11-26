@@ -2755,6 +2755,7 @@ window.raayaOpenSecureBank=async function(button){
  };
  const sp=make(staff,'إجازاتي','raayaLeavesStaffPanel');
  const ap=make(admin,'إجازات الموظفين','raayaLeavesAdminPanel');
+ const legacyLeaveButton=ap.previousElementSibling; if(legacyLeaveButton?.tagName==='BUTTON') legacyLeaveButton.remove();
  const form=E('form');form.style.display='grid';form.style.gap='8px';
  const heading=E('h3','طلب إجازة جديدة');form.append(heading);
  const labelInput=(text,type,required=true)=>{
