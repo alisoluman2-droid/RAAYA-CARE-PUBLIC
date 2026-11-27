@@ -807,6 +807,31 @@ try {
  const clean=t=>String(t??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const sharedActionStatus=t=>{const el=sharedPanel.querySelector('#raayaSharedActionStatus');if(el)el.textContent=t;if(t&&isFirebaseAdmin(current()))sharedPanel.hidden=false;};
  const sharedActions={};
+ const chooseAcceptedWorker=()=>new Promise(resolve=>{
+   const accepted=new Map();
+   for(const j of sharedCache.get('jobs')||[]){
+     if(j.ownerUid&&j.sourceId&&String(j.name||'').trim()&&['مقبول','مقبولة','accepted'].includes(String(j.status||'').trim())){
+       const prev=accepted.get(j.ownerUid);
+       if(!prev||Number(j.adminUpdatedAt||j.createdAt||0)>=Number(prev.adminUpdatedAt||prev.createdAt||0))accepted.set(j.ownerUid,j);
+     }
+   }
+   const candidates=[...accepted.values()];
+   if(!candidates.length){alert('لا يوجد موظفون مقبولون مرتبطون بحساب Firebase.');resolve(null);return;}
+   const dialog=document.createElement('dialog');dialog.dir='rtl';dialog.style.cssText='width:min(92vw,440px);border:1px solid #bdd3e3;border-radius:17px;padding:20px;color:#18364c;font-family:Tahoma,Arial;background:white;';
+   const title=document.createElement('h3');title.textContent='تعيين موظف';
+   const label=document.createElement('label');label.textContent='اختر الموظف المقبول';
+   const select=document.createElement('select');select.setAttribute('aria-label','اختر الموظف المقبول');
+   const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent='اختر من القائمة';placeholder.disabled=true;placeholder.selected=true;select.append(placeholder);
+   candidates.forEach((j,i)=>{const o=document.createElement('option');o.value=String(i);o.textContent=[j.name,j.city,j.phone||j.phoneNumber||j.mobile].filter(Boolean).join(' — ');select.append(o);});
+   const ok=document.createElement('button');ok.type='button';ok.textContent='تأكيد التعيين';ok.disabled=true;
+   const cancel=document.createElement('button');cancel.type='button';cancel.className='secondary';cancel.textContent='إلغاء';
+   let done=false;const finish=value=>{if(done)return;done=true;if(dialog.open)dialog.close();dialog.remove();resolve(value);};
+   select.onchange=()=>{ok.disabled=select.value==='';};
+   ok.onclick=()=>{if(select.value!=='')finish(candidates[Number(select.value)]||null);};
+   cancel.onclick=()=>finish(null);dialog.addEventListener('cancel',e=>{e.preventDefault();finish(null);});dialog.addEventListener('close',()=>finish(null));
+   label.append(select);dialog.append(title,label,ok,cancel);document.body.append(dialog);
+   try{dialog.showModal();}catch(e){finish(null);alert('تعذر فتح قائمة الموظفين.');}
+ });
  const updateShared=async(key,id,kind)=>{
    const u=current();if(!u){sharedActionStatus('يجب تسجيل الدخول إلى Firebase');return;}
    const token=await u.getIdTokenResult(true);
@@ -829,15 +854,20 @@ try {
      if(!old||old.raayaVisit?.state!=='completed'||old.status!=='مكتملة'){sharedActionStatus('الحذف متاح بعد انتهاء الرعاية المؤكدة فقط');return;}
      if(!confirm('حذف الطلب المكتمل نهائياً من Firebase وحساب العميل؟ لا يمكن التراجع.'))return;
    }else if(kind==='assign'){
-     worker=prompt('اسم الموظف المقبول');if(worker===null)return;
-     worker=worker.trim();if(!worker){sharedActionStatus('اسم الموظف مطلوب');return;}
-     workerPhone=prompt('رقم هاتف الموظف');if(workerPhone===null)return;
-     workerPhone=workerPhone.trim();if(!workerPhone){sharedActionStatus('رقم الهاتف مطلوب');return;}
-     // Use the verified Firebase account ID from an accepted job application.
-     const jobs=sharedCache.get('jobs')||[];
-     const matches=jobs.filter(j=>j.ownerUid&&String(j.phone||j.phoneNumber||j.mobile||'').replace(/\D/g,'')===workerPhone.replace(/\D/g,'')&&['مقبول','مقبولة','accepted'].includes(String(j.status||'').trim()));
-     if(matches.length!==1){sharedActionStatus('لا يمكن التعيين سحابياً: يجب وجود طلب توظيف مقبول واحد بنفس رقم الهاتف، مربوط بحساب Firebase للموظف.');return;}
-     var employeeUid=matches[0].ownerUid;
+     const selected=await chooseAcceptedWorker();if(!selected)return;
+     if(current()?.uid!==u.uid||!isFirebaseAdmin(current()))return;
+     const employeeId=safeId(selected.ownerUid),jobId=safeId(selected.sourceId);
+     if(employeeId!==String(selected.ownerUid)||jobId!==String(selected.sourceId)){sharedActionStatus('معرف الموظف أو الطلب غير صالح');return;}
+     let verified;
+     try{verified=(await get(ref(db,'raayaShared/jobs/'+employeeId+'/'+jobId))).val();}catch(e){alert('تعذر التحقق من قبول الموظف: '+(e.code||e.message));return;}
+     if(!verified||verified.ownerUid!==employeeId||String(verified.sourceId)!==jobId||!['مقبول','مقبولة','accepted'].includes(String(verified.status||'').trim())){alert('الموظف لم يعد ضمن الطلبات المقبولة.');return;}
+     worker=String(verified.name||'').trim();workerPhone=String(verified.phone||verified.phoneNumber||verified.mobile||'').trim();
+     if(!worker||!workerPhone){alert('بيانات الموظف غير مكتملة.');return;}
+     var employeeUid=employeeId;
+     const old=(sharedCache.get('requests')||[]).find(r=>String(r.ownerUid)+'/'+String(r.sourceId)===id);
+     if(!old||['مرفوض','مرفوض من الإدارة','مكتملة'].includes(old.status)){alert('هذا الطلب غير متاح للتعيين.');return;}
+     if(old.employeeUid&&old.employeeUid!==employeeUid){alert('يوجد موظف معيّن مسبقاً. لا يمكن استبداله من هذا الزر.');return;}
+     if(safeId(old.sourceId)!==String(old.sourceId)){alert('معرف طلب الرعاية غير صالح.');return;}
    }else return;
    try{
      sharedActionStatus('جاري حفظ التعديل على Firebase...');
@@ -853,13 +883,14 @@ try {
        }
        if(kind==='edit')return {...record,...edited,adminUpdatedAt:Date.now()};
        if(kind==='delete'){if(record.status!=='مكتملة'||record.raayaVisit?.state!=='completed')return;return null;}
+       if(kind!=='assign'||['مرفوض','مرفوض من الإدارة','مكتملة'].includes(record.status)||(record.employeeUid&&record.employeeUid!==employeeUid))return;
        return {...record,worker,workerPhone,employeeUid,adminUpdatedAt:Date.now()};
      },{applyLocally:false});
      if(result.committed&&kind==='assign'){
        // Per-employee projection: employee reads only their own UID node under restrictive server rules.
        const r=result.snapshot.val();
-       try{await update(ref(db,'raayaEmployeeAssignments/'+employeeUid+'/'+id),{
-         requestId:r.sourceId||id,ownerUid:r.ownerUid||'',employeeUid,worker:r.worker,workerPhone:r.workerPhone,
+       try{await update(ref(db,'raayaEmployeeAssignments/'+employeeUid+'/'+safeId(r.sourceId)),{
+         requestId:String(r.sourceId),ownerUid:r.ownerUid||'',employeeUid,worker:r.worker,workerPhone:r.workerPhone,
          client:r.name||r.client||'',service:r.service||'',city:r.city||'',date:r.date||r.visitDate||'',
          time:r.time||r.visitTime||'',status:r.status||'',updatedAt:Date.now()
        });sharedActionStatus('تم تعيين الموظف وحفظ الزيارة في حسابه السحابي.');}
