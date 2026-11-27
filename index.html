@@ -174,12 +174,12 @@ body:has(#login:not(.hide)) #raayaSamarCredit {display:none}
  if(btn)btn.disabled=true;
  notice.textContent='جاري إرسال الطلب والتحقق من حفظه…';
  try{
-  if(typeof window.raayaCloudSaveJob!=='function')throw Error('الاتصال بالخادم غير جاهز');
+  await window.raayaWaitForCloud();
   await window.raayaCloudSaveJob(item);
   put('jobs',[...get('jobs'),item]);
   notice.textContent='تم إرسال طلب التوظيف بنجاح.';
  }catch(e){
-  notice.textContent='لم يتم تأكيد إرسال الطلب للإدارة. حاول مرة أخرى عند توفر الاتصال.';
+  notice.textContent='لم يتم تأكيد إرسال الطلب: '+(e.code||e.message||'تحقق من الاتصال');
   console.error('RAAYA job submission:',e);
  }finally{if(btn)btn.disabled=false;}
 }
@@ -197,13 +197,14 @@ for(const [id,label] of fields){const el=document.getElementById(id);if(!String(
 try{saveRequest(e);}catch(err){msg.textContent='تعذّر حفظ الطلب على هذا الجهاز. افتح الملف في Chrome وتأكد من السماح بالتخزين.';console.error(err);}
 return false;
 }
-function saveRequest(e){e.preventDefault();const item={id:Date.now(),service,client:person,clientPhone:document.getElementById('loginPhone').value.trim(),name:document.getElementById('reqName').value,city:document.getElementById('city').value,gender:document.getElementById('gender').value,age:document.getElementById('age').value,beneficiaryPhone:document.getElementById('beneficiaryPhone').value,familyPhone:document.getElementById('familyPhone').value,place:document.getElementById('place').value,date:document.getElementById('date').value+'T'+document.getElementById('visitTime').value,details:document.getElementById('details').value,status:'قيد المراجعة',payment:'لم يتم الدفع'};put('requests',[...get('requests'),item]);e.target.reset();show('confirmation');
-const confirmation=document.getElementById('confirmation');
-let cloudNote=document.getElementById('raayaCloudResult');
-if(!cloudNote){cloudNote=document.createElement('p');cloudNote.id='raayaCloudResult';cloudNote.setAttribute('role','status');confirmation.appendChild(cloudNote);}
-cloudNote.textContent='الطلب محفوظ على هذا الجهاز. جاري التحقق من الحفظ في Firebase…';
-const outdated=confirmation.querySelector('h1,h2,h3');if(outdated)outdated.textContent='جاري إرسال الطلب';
-Promise.race([Promise.resolve().then(()=>{if(typeof window.raayaCloudSaveRequest!=='function')throw Error('خدمة الحفظ السحابي غير جاهزة');return window.raayaCloudSaveRequest(item)}),new Promise((_,reject)=>setTimeout(()=>reject(Error('انتهت مهلة الاتصال بعد 15 ثانية؛ افحص Firebase من رابط HTTPS وليس ملف التنزيلات')),15000))]).then(()=>{cloudNote.textContent='تم تأكيد حفظ الطلب في Firebase؛ وصوله للوحة الإدارة يحتاج اختباراً.';if(outdated)outdated.textContent='تم إرسال طلبك بنجاح';}).catch(err=>{if(outdated)outdated.textContent='لم يتم تأكيد إرسال الطلب';cloudNote.textContent='تعذّر تأكيد وصول الطلب للإدارة. يُرجى المحاولة لاحقًا.';console.error('RAAYA care submission:',err);});}function myRequests(){document.getElementById('requestList').innerHTML=get('requests').filter(x=>x.client===person || (x.clientPhone && x.clientPhone===document.getElementById('loginPhone').value.trim())).map(x=>`<div class="pill"><b>${escapeHTML(x.name)} — ${names[lang][x.service]}</b><p>${escapeHTML(x.city)} • ${escapeHTML(x.date)}</p><small>${escapeHTML(x.status)} • ${escapeHTML(x.payment)}</small>${x.worker?`<p>الموظف المعيّن: ${escapeHTML(x.worker)} ${escapeHTML(x.workerPhone||'')}</p>`:''}</div>`).join('')||'<p>لا توجد طلبات بعد</p>';show('myrequests')}function escapeHTML(v){return String(v||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}async function saveHours(){
+async function saveRequest(e){e.preventDefault();const form=e.currentTarget; if(form.dataset.sending==='1')return; form.dataset.sending='1';
+const item={id:Date.now(),service,client:person,clientPhone:document.getElementById('loginPhone').value.trim(),name:document.getElementById('reqName').value,city:document.getElementById('city').value,gender:document.getElementById('gender').value,age:document.getElementById('age').value,beneficiaryPhone:document.getElementById('beneficiaryPhone').value,familyPhone:document.getElementById('familyPhone').value,place:document.getElementById('place').value,date:document.getElementById('date').value+'T'+document.getElementById('visitTime').value,details:document.getElementById('details').value,status:'قيد المراجعة',payment:'لم يتم الدفع'};
+const msg=document.getElementById('requestValidationMessage');const btn=form.querySelector('button[type="submit"],button:not([type])'); if(btn)btn.disabled=true;
+try{if(msg)msg.textContent='جاري إرسال الطلب…';await window.raayaWaitForCloud();await window.raayaCloudSaveRequest(item);
+const rows=get('requests');if(!rows.some(x=>String(x.id)===String(item.id)))put('requests',[...rows,item]);form.reset();show('confirmation');const h=document.getElementById('confirmation')?.querySelector('h1,h2,h3');if(h)h.textContent='تم إرسال طلبك بنجاح';if(msg)msg.textContent='';}
+catch(err){if(msg)msg.textContent='لم يتم تأكيد إرسال الطلب: '+(err.code||err.message||'تحقق من الاتصال');}
+finally{delete form.dataset.sending;if(btn)btn.disabled=false;}}
+function myRequests(){document.getElementById('requestList').innerHTML=get('requests').filter(x=>x.client===person || (x.clientPhone && x.clientPhone===document.getElementById('loginPhone').value.trim())).map(x=>`<div class="pill"><b>${escapeHTML(x.name)} — ${names[lang][x.service]}</b><p>${escapeHTML(x.city)} • ${escapeHTML(x.date)}</p><small>${escapeHTML(x.status)} • ${escapeHTML(x.payment)}</small>${x.worker?`<p>الموظف المعيّن: ${escapeHTML(x.worker)} ${escapeHTML(x.workerPhone||'')}</p>`:''}</div>`).join('')||'<p>لا توجد طلبات بعد</p>';show('myrequests')}function escapeHTML(v){return String(v||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}async function saveHours(){
  const date=document.getElementById('workDate').value,h=Number(document.getElementById('hours').value);
  if(!date||!(h>0&&h<=24))return alert('أدخل التاريخ وعدد الساعات');
  const btn=document.querySelector('#staff button[onclick="saveHours()"]');if(btn)btn.disabled=true;
@@ -748,6 +749,7 @@ try {
    for(const {uid,r} of entries){
     const line=document.createElement('div');line.className='pill';
     line.textContent=[r.employee||uid,r.date,Number(r.h)+' ساعات',r.status||'قيد المراجعة'].join(' — ');
+    if(r.status==='قيد المراجعة')for(const [title,status] of [['اعتماد الساعات','معتمدة'],['رفض الساعات','مرفوضة']]){const b=document.createElement('button');b.type='button';b.textContent=title;b.onclick=async()=>{if(!isFirebaseAdmin(current()))return;b.disabled=true;try{const result=await runTransaction(ref(db,'raayaSubmittedHours/'+uid+'/'+r.id),old=>old&&old.status==='قيد المراجعة'?{...old,status,reviewedBy:current().uid,reviewedAt:Date.now()}:undefined,{applyLocally:false});if(!result.committed)alert('لم يتم اعتماد التعديل');}catch(e){alert('تعذر حفظ حالة الساعات: '+(e.code||e.message))}finally{b.disabled=false}};line.append(b)}
     box.append(line);
    }
    if(!entries.length){const empty=document.createElement('p');empty.textContent='لا توجد ساعات مرسلة';box.append(empty);}
@@ -757,6 +759,8 @@ try {
  // Preview-only anonymous session. Do not impersonate the existing admin Firebase users.
  let anonymousPending=null;
  const ensurePreviewAuth=async()=>{
+   if(typeof auth.authStateReady==='function')await auth.authStateReady();
+   if(current() && isFirebaseAdmin(current()))throw Error('اخرج من حساب الإدارة أولاً');
    if(current())return current();
    if(!anonymousPending)anonymousPending=signInAnonymously(auth).then(result=>result.user).finally(()=>{anonymousPending=null;});
    return anonymousPending;
@@ -770,6 +774,8 @@ try {
  syncIndicator.textContent='المزامنة: بانتظار تسجيل الدخول إلى Firebase';
  status.insertAdjacentElement('afterend',syncIndicator);
  const syncState=t=>{syncIndicator.textContent='المزامنة: '+t;};
+ window.raayaEnsurePublicAuth=ensurePreviewAuth;
+ window.raayaSignOutFirebase=()=>signOut(auth);
  const PREFIX='raaya_nov7_clean_trial_20261107_';
  const KEYS=['requests','jobs','hours'];
  let subscriptions=[],ready=false,loading=false;
@@ -945,14 +951,14 @@ try {
    if(!sharedPanel.isConnected)parent.insertAdjacentElement('afterend',sharedPanel);
    const target=sharedPanel.querySelector('#raayaSharedAdminItems');
    target.replaceChildren();
-   sharedPanel.hidden=!sharedKeys.some(key=>(sharedCache.get(key)||[]).some(r=>key!=='requests'||(!hiddenRequestKeys.has(String(r.ownerUid)+'/'+String(r.sourceId))&&!['مرفوض','مرفوض من الإدارة'].includes(r.status))))&&!sharedPanel.querySelector('#raayaSharedActionStatus').textContent;
-   for(const key of sharedKeys){
+   sharedPanel.hidden=!(sharedCache.get('requests')||[]).some(r=>!hiddenRequestKeys.has(String(r.ownerUid)+'/'+String(r.sourceId)))&&!sharedPanel.querySelector('#raayaSharedActionStatus').textContent;
+   for(const key of ['requests']){
      const rows=sharedCache.get(key)||[];
      const h=document.createElement('h4');h.textContent=(key==='requests'?'طلبات الرعاية':'طلبات التوظيف')+' ('+rows.length+')';target.append(h);
      if(!rows.length){const p=document.createElement('p');p.textContent='لا توجد سجلات مشتركة';target.append(p);}
      for(const r of rows){
-       if(key==='requests'&&(hiddenRequestKeys.has(String(r.ownerUid)+'/'+String(r.sourceId))||['مرفوض','مرفوض من الإدارة'].includes(r.status)))continue;
-       const box=document.createElement('div');box.className='pill';
+       if(key==='requests'&&hiddenRequestKeys.has(String(r.ownerUid)+'/'+String(r.sourceId)))continue;
+       const box=document.createElement('div');box.className='pill';box.dataset.sharedStatus=r.status||'قيد المراجعة';
        const info=document.createElement('p');info.textContent=(r.name||r.client||'بدون اسم')+' — '+(r.city||'')+' | الحالة: '+(r.status||'غير محددة')+' | الخدمة: '+(r.service||'');box.append(info);
        const id=r.ownerUid&&r.sourceId?String(r.ownerUid)+'/'+String(r.sourceId):null;
        if(key==='requests'&&id){
@@ -980,7 +986,17 @@ try {
        target.append(box);
      }
    }
+   renderSharedJobs();renderSharedPayments();window.raayaApplySharedFilters?.();
  };
+ function renderSharedJobs(){
+   const anchor=document.getElementById('adminJobs');if(!anchor)return;
+   let panel=document.getElementById('raayaSharedJobsFeed');if(!panel){panel=document.createElement('div');panel.id='raayaSharedJobsFeed';anchor.after(panel);}
+   panel.replaceChildren();const rows=sharedCache.get('jobs')||[];
+   for(const r of rows){const card=document.createElement('div');card.className='pill';card.dataset.sharedStatus=r.status||'قيد المراجعة';const info=document.createElement('p');info.textContent=[r.name,r.city,r.phone,r.status].filter(Boolean).join(' — ');card.append(info);
+     if(!r.status||r.status==='قيد المراجعة')for(const [label,next] of [['قبول طلب التوظيف','مقبول'],['رفض الطلب','مرفوض']]){const b=document.createElement('button');b.type='button';b.textContent=label;if(next==='مرفوض')b.className='raaya-reject';b.onclick=async()=>{if(!isFirebaseAdmin(current()))return;b.disabled=true;try{const result=await runTransaction(ref(db,'raayaShared/jobs/'+r.ownerUid+'/'+r.sourceId),old=>old&&(!old.status||old.status==='قيد المراجعة')?{...old,status:next,adminUpdatedAt:Date.now()}:undefined,{applyLocally:false});if(!result.committed)alert('لم يتم تعديل الطلب');}catch(e){alert('تعذر حفظ القرار: '+(e.code||e.message))}finally{b.disabled=false}};card.append(b)}panel.append(card);
+   }
+ }
+ function renderSharedPayments(){const anchor=document.getElementById('raayaPayments');if(!anchor)return;let panel=document.getElementById('raayaSharedPaymentsFeed');if(!panel){panel=document.createElement('div');panel.id='raayaSharedPaymentsFeed';anchor.after(panel);}panel.replaceChildren();for(const r of sharedCache.get('requests')||[]){if(!(Number(r.amount)>0)||['مرفوض','مرفوض من الإدارة'].includes(r.status))continue;const card=document.createElement('div');card.className='pill';card.textContent=[r.name,'المبلغ: '+r.amount+' شيكل',r.payment||'لم يتم الدفع',r.status].filter(Boolean).join(' — ');panel.append(card);}}
 
  // Do not republish historical local requests after Firebase cleanup.
  // New requests and job applications are submitted only by explicit user action.
@@ -1004,9 +1020,9 @@ try {
        ownerOverrides.set(key,byId);
        if(key==='requests')renderOwnerVisitConfirm();
        const existing=local(key);
-       if(!existing.length)return;
        let changed=false;
-       const merged=existing.map(r=>{
+       const ownRows=rows.map(r=>({...r,id:r.id??r.sourceId}));
+       const merged=ownRows.map(r=>{
          const cloud=byId.get(String(recordId(r)));
          if(!cloud)return r;
          const fields=['status','amount','worker','workerPhone','adminUpdatedAt'];
@@ -1014,7 +1030,7 @@ try {
          for(const field of fields)if(Object.prototype.hasOwnProperty.call(cloud,field)&&next[field]!==cloud[field]){next[field]=cloud[field];changed=true;}
          return next;
        });
-       if(changed){loading=true;try{localStorage.setItem(PREFIX+key,JSON.stringify(merged));}finally{loading=false;}
+       if(changed||JSON.stringify(existing)!==JSON.stringify(merged)){loading=true;try{localStorage.setItem(PREFIX+key,JSON.stringify(merged));}finally{loading=false;}
          try{if(key==='requests'){window.myRequests?.();window.staffView?.();}}catch(e){console.warn(e);}}
      },e=>say('تعذر قراءة تحديثات الإدارة: '+(e.code||e.message)));
      ownerSharedUnsub.push(off);
@@ -1101,7 +1117,7 @@ try {
    },e=>{employeeAssignmentPanel.querySelector('#raayaEmployeeCloudRows').textContent='تعذر قراءة الزيارات: تحقق من صلاحيات Firebase';});
  };
  const beginShared=async(u)=>{
-   sharedUnsub.forEach(fn=>fn());sharedUnsub=[];sharedCache.clear();hiddenRequestKeys.clear();sharedPanel.remove();window.raayaAdminSharedRecords=undefined;
+   sharedUnsub.forEach(fn=>fn());sharedUnsub=[];sharedCache.clear();hiddenRequestKeys.clear();sharedPanel.remove();document.getElementById('raayaSharedJobsFeed')?.remove();document.getElementById('raayaSharedPaymentsFeed')?.remove();window.raayaAdminSharedRecords=undefined;
    if(!u)return;
    const token=await u.getIdTokenResult();
    if(current()?.uid!==u.uid || !isFirebaseAdmin(u))return;
@@ -1148,7 +1164,7 @@ try {
     // Treat the authenticated administrator's Firebase snapshot as authoritative.
     // Do not revive deleted local test requests in the administration dashboard.
     const merged=new Map();
-    if(key==='requests'&&!isFirebaseAdmin(u))for(const r of local(key)){const id=recordId(r);if(id)merged.set(id,r);}
+    if(sharedKeys.includes(key)&&!isFirebaseAdmin(u))for(const r of ownerOverrides.get(key)?.values()||[]){const id=recordId(r);if(id)merged.set(id,r);}
     for(const r of remote){const id=recordId(r);if(id){
       const shared=ownerOverrides.get(key)?.get(String(id));
       const fields=['status','amount','worker','workerPhone','adminUpdatedAt'];
@@ -1241,7 +1257,7 @@ try {
      if(current()?.uid===uid&&hoursLedgerPanel)hoursLedgerPanel.querySelector('[data-hours-error]').textContent='تعذر قراءة الساعات: '+(e.code||e.message)+'؛ راجع قواعد Firebase.';
    });
  };
- onAuthStateChanged(auth,u=>{window.raayaFirebaseSignedIn=!!u;/* لا تحذف سجلات Firebase تلقائياً عند الدخول */const banner=document.getElementById('raayaFirebaseStatus');if(banner&&window.raayaFirebaseConnectionState==='connected'){banner.textContent=u?'Firebase: '+(u.isAnonymous?'حساب تجريبي مجهول':('حساب '+(u.email||'مسجّل')))+' متصل — تحقق من حالة المزامنة':'Firebase: الخادم متصل، لكن يلزم تسجيل دخول Firebase للمزامنة (اضغط هنا)';}beginSubmittedHours(u);beginHoursLedger(u).catch(e=>say('تعذر فتح سجل الساعات: '+(e.code||e.message)));beginSync(u);beginOwnerShared(u);beginEmployeeAssignments(u);beginShared(u).catch(e=>say('فشل قراءة صلاحية الإدارة: '+(e.code||e.message)));say(u?'تم تسجيل الدخول إلى Firebase: '+(u.isAnonymous?'حساب تجريبي مجهول':(u.email||'حساب مسجّل'))+' — مزامنة تجريبية داخل الحساب فقط':'لم يتم تسجيل الدخول إلى Firebase بعد.');document.getElementById('raayaOpenApp').style.display=u?'block':'none';document.getElementById('raayaCloudPanel').style.display='block';document.getElementById('raayaCloudPanel').querySelector('h3').textContent=u?'حساب Firebase المتصل':'المزامنة التجريبية عبر Firebase Anonymous';document.getElementById('raayaCloudLogin').style.display=u?'none':'inline-block';document.getElementById('raayaCloudTest').style.display=u?'inline-block':'none';document.getElementById('raayaCloudLogout').style.display=u?'inline-block':'none';});
+ onAuthStateChanged(auth,u=>{window.raayaFirebaseSignedIn=!!u;/* لا تحذف سجلات Firebase تلقائياً عند الدخول */const banner=document.getElementById('raayaFirebaseStatus');if(banner&&window.raayaFirebaseConnectionState==='connected'){banner.textContent=u?'Firebase: '+(u.isAnonymous?'حساب تجريبي مجهول':('حساب '+(u.email||'مسجّل')))+' متصل — تحقق من حالة المزامنة':'Firebase: الخادم متصل، لكن يلزم تسجيل دخول Firebase للمزامنة (اضغط هنا)';}beginSubmittedHours(u);beginHoursLedger(u).catch(e=>say('تعذر فتح سجل الساعات: '+(e.code||e.message)));beginSync(u);beginEmployeeAssignments(u);beginShared(u).then(()=>beginOwnerShared(u)).catch(e=>say('فشل قراءة صلاحية الإدارة: '+(e.code||e.message)));say(u?'تم تسجيل الدخول إلى Firebase: '+(u.isAnonymous?'حساب تجريبي مجهول':(u.email||'حساب مسجّل'))+' — مزامنة تجريبية داخل الحساب فقط':'لم يتم تسجيل الدخول إلى Firebase بعد.');document.getElementById('raayaOpenApp').style.display=u?'block':'none';document.getElementById('raayaCloudPanel').style.display='block';document.getElementById('raayaCloudPanel').querySelector('h3').textContent=u?'حساب Firebase المتصل':'المزامنة التجريبية عبر Firebase Anonymous';document.getElementById('raayaCloudLogin').style.display=u?'none':'inline-block';document.getElementById('raayaCloudTest').style.display=u?'inline-block':'none';document.getElementById('raayaCloudLogout').style.display=u?'inline-block':'none';});
  document.getElementById('raayaOpenApp').onclick=()=>{
    document.body.classList.add('raaya-app-open'); document.getElementById('raayaCloudPanel')?.style.setProperty('display','none','important'); document.getElementById('raayaFirebaseStatus')?.style.setProperty('display','none','important');
   const login=document.getElementById('login');
@@ -1262,8 +1278,8 @@ try {
  };
  document.getElementById('raayaCloudLogout').onclick=async()=>{await signOut(auth);say('تم تسجيل الخروج.');};
  const save=async(item)=>{
-  const u=current();
-  if(!u || u.isAnonymous)throw Error('يجب تسجيل الدخول إلى حساب Firebase موثق قبل إرسال الطلب');
+  const u=await ensurePreviewAuth();
+  if(!u)throw Error('تعذر إنشاء جلسة Firebase للعميل');
   const id=String(item?.id||'');
   if(!/^[A-Za-z0-9_-]+$/.test(id))throw Error('معرّف الطلب غير صالح');
   const path='raayaShared/requests/'+u.uid+'/'+id;
@@ -1822,9 +1838,12 @@ run();
   const list=dataFor(id),cards=Array.from(root.children).filter(e=>e.classList.contains('pill'));
   let shown=0;
   cards.forEach((card,i)=>{const visible=!!list[i]&&match(id,current,list[i]);card.hidden=!visible;card.style.display=visible?'':'none';if(visible)shown++});
+  applyShared(id,current);
   const empty=document.getElementById('raaya-empty-'+id);
   if(empty){empty.textContent=translate('empty');empty.hidden=shown>0||!cards.length;}
  }
+ function applyShared(id,category){const root=document.getElementById(id==='adminRequests'?'raayaSharedAdminItems':id==='adminJobs'?'raayaSharedJobsFeed':'');if(!root)return;for(const card of root.querySelectorAll('[data-shared-status]')){const visible=match(id,category,{status:card.dataset.sharedStatus});card.hidden=!visible;card.style.display=visible?'':'none';}}
+ window.raayaApplySharedFilters=()=>{applyShared('adminRequests',chosen.adminRequests);applyShared('adminJobs',chosen.adminJobs);};
  function ensure(id){
   const root=document.getElementById(id);if(!root||document.getElementById('raaya-tabs-'+id))return;
   const tabs=document.createElement('div');tabs.id='raaya-tabs-'+id;tabs.className='raaya-status-tabs';
@@ -2684,7 +2703,7 @@ window.raayaOpenSecureBank=async function(button){
  const employeeBox=add(document.getElementById('workerTasks'),'تذكيرات زياراتي');
  const clientBox=add(document.getElementById('client'),'تذكيرات الرعاية');
  const adminBox=add(document.getElementById('admin'),'متابعة الزيارات والتذكيرات');if(adminBox)adminBox.id='raayaAdminVisitReminders';
- let stop=()=>{},uid=null,seen=new Set();
+ let stop=()=>{},staffStop=()=>{},uid=null,seen=new Set();
  function toRows(data){return Object.entries(data||{}).flatMap(([owner,records])=>Object.entries(records||{}).map(([id,v])=>({...v,ownerUid:v?.ownerUid||owner,sourceId:id}))).filter(x=>x&&typeof x==='object')}
  function dateOf(r){const raw=r.visitDate||r.date||r.scheduledDate;const time=r.visitTime||r.time||'00:00';if(!raw)return null;const d=new Date(String(raw).includes('T')?raw:String(raw)+'T'+String(time).slice(0,5)+':00');return Number.isNaN(d.getTime())?null:d}
  function draw(box,rows,kind){
@@ -2707,13 +2726,14 @@ window.raayaOpenSecureBank=async function(button){
   }
  }
  onAuthStateChanged(auth,user=>{
-  stop();stop=()=>{};uid=user?.uid||null;seen.clear();
+  stop();staffStop();stop=()=>{};staffStop=()=>{};uid=user?.uid||null;seen.clear();
   for(const box of [employeeBox,clientBox,adminBox])if(box)box.textContent=user?'جاري تحميل الزيارات من Firebase…':'سجل الدخول لعرض التذكيرات';
   if(!uid)return;
+  if(!admins.has(uid))staffStop=onValue(ref(db,'raayaEmployeeAssignments/'+uid),snap=>{const rows=Object.values(snap.val()||{}).flatMap(v=>v&&v.employeeUid?[v]:Object.values(v||{}));draw(employeeBox,rows,'employee');},()=>{if(employeeBox)employeeBox.textContent='تعذر تحميل تذكيرات الموظف';});
   stop=onValue(ref(db,admins.has(uid)?'raayaShared/requests':'raayaShared/requests/'+uid),snap=>{
    const admin=admins.has(uid),rows=toRows(admin?snap.val():{[uid]:snap.val()});
    if(admin){draw(adminBox,rows,'admin');if(employeeBox)employeeBox.textContent='متاح للموظف فقط';if(clientBox)clientBox.textContent='متاح للعميل فقط'}
-   else{draw(employeeBox,rows,'employee');draw(clientBox,rows,'client')}
+   else{draw(clientBox,rows,'client')}
   },()=>{for(const box of [employeeBox,clientBox,adminBox])if(box)box.textContent='تعذر تحميل التذكيرات: صلاحيات قراءة الزيارات في Firebase غير متاحة لهذا الحساب.'});
  });
 })().catch(()=>{});
@@ -3110,7 +3130,7 @@ function sync(){for(const [key,label,id] of specs){const p=panels[key],n=documen
 const complaint=document.getElementById('raayaComplaintAdminButton');if(complaint){menu.append(complaint);complaint.className='raaya-admin-menu-button';complaint.textContent='الشكاوى';}
 function dedup(){if(complaint)admin.querySelectorAll('button').forEach(b=>{if(b!==complaint&&/^(الشكاوى|استقبال الشكاوى)$/.test(b.textContent.trim()))b.remove()});sync();}
 new MutationObserver(dedup).observe(admin,{childList:true,subtree:true});dedup();
-const visits=staff?.querySelector('[data-k="visits"]'),tasks=document.getElementById('workerTasks');if(visits&&tasks){visits.after(tasks);visits.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();window.raayaToggleStaffVisits();},true);}
+const visits=staff?.querySelector('[data-k="visits"]'),tasks=document.getElementById('workerTasks');if(visits&&tasks){visits.after(tasks);}
 })();</script><script id="raaya-admin-order-final">
 (()=>{
  const admin=document.getElementById('admin'),menu=document.getElementById('raayaAdminMenu');if(!admin||!menu)return;
@@ -3119,9 +3139,15 @@ const visits=staff?.querySelector('[data-k="visits"]'),tasks=document.getElement
  for(const [key,label] of specs){const b=document.createElement('button');b.type='button';b.className='raaya-admin-menu-button';b.textContent=label;b.dataset.finalAdminKey=key;menu.append(b);const panel=document.createElement('div');panel.className='raaya-admin-panel';panel.dataset.finalAdminSlot=key;panel.hidden=true;const back=document.createElement('button');back.type='button';back.className='secondary';back.textContent='رجوع إلى لوحة الإدارة';back.onclick=()=>window.raayaAdminOpen(null);panel.append(back);admin.append(panel);slots[key]=panel;}
  function reconcile(){
   for(const b of menu.querySelectorAll('button'))if(!b.dataset.finalAdminKey&& !b.hidden)b.hidden=true;
-  for(const [key,label,id] of specs){const panel=slots[key],node=document.getElementById(id);if(node&&node!==panel&&!panel.contains(node))panel.append(node);if(node){if(node.hidden)node.hidden=false;if(node.classList.contains('hide'))node.classList.remove('hide');}if(panel.hidden!==(active!==key))panel.hidden=active!==key;}
+  for(const [key,label,id] of specs){const panel=slots[key],node=document.getElementById(id);if(node&&node!==panel&&!panel.contains(node))panel.append(node);if(node){if(node.hidden)node.hidden=false;if(node.classList.contains('hide'))node.classList.remove('hide');}if(panel.hidden!==(active!==key))panel.hidden=active!==key;
+    if(node)for(const back of node.querySelectorAll('button'))if(back.textContent.trim()==='رجوع إلى لوحة الإدارة'&&!back.hidden)back.hidden=true;
+    if(key==='salary'){const cloud=document.getElementById('raayaCloudSalaryPanel');if(cloud&&admin.contains(cloud)){if(!panel.contains(cloud))panel.append(cloud);cloud.hidden=false;}}
+    if(key==='workers'){const management=document.getElementById('raayaEmployeeManagement');if(management&&admin.contains(management)){if(!panel.contains(management))panel.append(management);management.hidden=false;}}
+  }
   for(const node of [...admin.children]){if(node===menu||node.dataset.finalAdminSlot||node.classList.contains('top'))continue;if(!node.hidden)node.hidden=true;}
   if(menu.hidden!==!!active)menu.hidden=!!active;
+  const exit=admin.querySelector('.top button[data-k="exit"]');if(exit){exit.hidden=!!active;exit.style.display=active?'none':'';exit.onclick=()=>window.raayaRoleExit();}
+  for(const node of admin.querySelectorAll('[data-final-admin-slot] > button.secondary'))node.hidden=false;
  }
  window.raayaAdminOpen=function(key){active=slots[key]?key:null;reconcile();};
  menu.addEventListener('click',event=>{const b=event.target.closest('[data-final-admin-key]');if(!b)return;event.preventDefault();event.stopImmediatePropagation();window.raayaAdminOpen(b.dataset.finalAdminKey)},true);
@@ -3136,6 +3162,16 @@ const visits=staff?.querySelector('[data-k="visits"]'),tasks=document.getElement
  if(tasks&&tasksBtn){tasksBtn.after(tasks);tasksBtn.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();const opening=tasks.hidden;tasks.hidden=!opening;tasks.style.display=opening?'block':'none';tasksBtn.setAttribute('aria-expanded',String(opening));},true);}
  const assigned=document.getElementById('raayaAssignedVisitsToggle');
  if(assigned){assigned.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();const panel=document.getElementById('raayaEmployeeCloudAssignments');if(!panel){assigned.setAttribute('aria-expanded','false');return;}assigned.after(panel);const opening=panel.hidden||getComputedStyle(panel).display==='none';panel.hidden=!opening;panel.style.display=opening?'block':'none';assigned.setAttribute('aria-expanded',String(opening));},true);}
+ const salary=document.getElementById('raayaSalaryToggle');if(salary)salary.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();const cloud=document.getElementById('raayaCloudSalaryPanel');if(!cloud||!staff.contains(cloud)){alert('سجل الدخول بحساب موظف Firebase لعرض الراتب');return;}salary.after(cloud);cloud.hidden=!cloud.hidden;salary.setAttribute('aria-expanded',String(!cloud.hidden));},true);
  const bank=document.getElementById('raayaBankToggle');if(bank){bank.addEventListener('click',()=>{const panel=document.getElementById('raayaSecureBankPanel');if(panel&&panel.parentElement!==staff)bank.after(panel);},false);}
 })();
-</script></body></html>
+</script><script id="raaya-27nov-auth-guard-final">
+(function(){
+ window.raayaWaitForCloud=async function(){for(let i=0;i<100;i++){if(typeof window.raayaEnsurePublicAuth==='function')return;await new Promise(r=>setTimeout(r,100));}throw Error('خدمة Firebase غير جاهزة. تحقق من اتصال الإنترنت');};
+ const prevEnter=window.enter;
+ window.enter=async function(){const n=document.getElementById('loginName').value.trim().normalize('NFKC').replace(/[\u064B-\u065F\u0670\u0640]/g,'').replace(/\s+/g,' '),p=document.getElementById('loginPhone').value.trim();if(['علي سليمان','سمر النتشة'].includes(n)||!n||!p||!(/^[+0-9\s()\-]{5,20}$/).test(p))return prevEnter.apply(this,arguments);const btn=document.querySelector('#login button[onclick="enter()"]');if(btn)btn.disabled=true;try{await window.raayaWaitForCloud();await window.raayaEnsurePublicAuth();return prevEnter.apply(this,arguments);}catch(e){alert('تعذر الاتصال بحساب Firebase: '+(e.code||e.message));}finally{if(btn)btn.disabled=false;}};
+ const prevExit=window.raayaRoleExit;
+ window.raayaRoleExit=async function(){const btn=document.querySelector('#admin .top button[data-k="exit"]');if(btn)btn.disabled=true;try{await window.raayaWaitForCloud();await window.raayaSignOutFirebase();window.raayaAdminOpen?.(null);prevExit.apply(this,arguments);history.replaceState({raayaRoot:true},'','#login');}catch(e){alert('تعذر تسجيل الخروج من Firebase: '+(e.code||e.message));}finally{if(btn)btn.disabled=false;}};
+})();
+</script>
+</body></html>
