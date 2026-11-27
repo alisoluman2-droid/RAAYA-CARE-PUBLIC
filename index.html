@@ -891,7 +891,7 @@ try {
        const r=result.snapshot.val();
        try{await update(ref(db,'raayaEmployeeAssignments/'+employeeUid+'/'+safeId(r.sourceId)),{
          requestId:String(r.sourceId),ownerUid:r.ownerUid||'',employeeUid,worker:r.worker,workerPhone:r.workerPhone,
-         client:r.name||r.client||'',service:r.service||'',city:r.city||'',date:r.date||r.visitDate||'',
+         client:r.name||r.client||'',service:r.service??'',city:r.city||'',date:r.date||r.visitDate||'',
          time:r.time||r.visitTime||'',status:r.status||'',updatedAt:Date.now()
        });sharedActionStatus('تم تعيين الموظف وحفظ الزيارة في حسابه السحابي.');}
        catch(e){sharedActionStatus('حُفظ التعيين في الطلب، لكن إرسال الزيارة لحساب الموظف فشل: '+(e.code||e.message));}
@@ -990,7 +990,7 @@ try {
      for(const r of rows){
        if(key==='requests'&&hiddenRequestKeys.has(String(r.ownerUid)+'/'+String(r.sourceId)))continue;
        const box=document.createElement('div');box.className='pill';box.dataset.sharedStatus=r.status||'قيد المراجعة';
-       const info=document.createElement('p');info.textContent=(r.name||r.client||'بدون اسم')+' — '+(r.city||'')+' | الحالة: '+(r.status||'غير محددة')+' | الخدمة: '+(r.service||'');box.append(info);
+       const info=document.createElement('p');info.textContent=(r.name||r.client||'بدون اسم')+' — '+(r.city||'')+' | الحالة: '+(r.status||'غير محددة')+' | الخدمة: '+(typeof names!=='undefined'?(names[lang]?.[r.service]??r.service??''):(r.service??''));box.append(info);
        const id=r.ownerUid&&r.sourceId?String(r.ownerUid)+'/'+String(r.sourceId):null;
        if(key==='requests'&&id){
          const approve=document.createElement('button');approve.textContent='الموافقة وتحديد المبلغ';approve.disabled=!['قيد المراجعة','بانتظار موافقة الإدارة'].includes(r.status);approve.onclick=()=>updateShared(key,id,'approve');box.append(approve);
@@ -1043,36 +1043,44 @@ try {
  const sharedWrite=async(key,items,uid)=>{};
  // Listen to admin-approved changes in the owner's shared records.
  // Only overlay server fields; never write them back to the shared record.
+ let ownerReadState='loading',ownerReadUid=null;
+ const renderOwnerRequests=()=>{
+   const host=document.getElementById('requestList');if(!host)return;
+   const u=current();host.replaceChildren();
+   const message=t=>{const p=document.createElement('p');p.textContent=t;host.append(p);};
+   if(!u||isFirebaseAdmin(u)){message('يلزم تسجيل الدخول بحساب العميل.');return;}
+   if(ownerReadUid!==u.uid||ownerReadState==='loading'){message('جاري تحميل طلباتك…');return;}
+   if(ownerReadState==='error'){message('تعذر تحميل طلباتك من الخادم. تحقق من الاتصال أو صلاحية الحساب.');return;}
+   const rows=[...(ownerOverrides.get('requests')?.values()||[])].filter(r=>r.ownerUid===u.uid);
+   if(!rows.length){message('لا توجد طلبات مرتبطة بحساب Firebase الحالي.');return;}
+   for(const r of rows){
+     const card=document.createElement('div');card.className='pill';
+     const line=(tag,value)=>{const el=document.createElement(tag);el.textContent=value;card.append(el);};
+     line('b',[r.name||r.client||'طلب رعاية',typeof names!=='undefined'?(names[lang]?.[r.service]??r.service??''):(r.service??'')].filter(x=>x!=='').join(' — '));
+     line('p',[r.city,r.date].filter(Boolean).join(' • '));
+     line('p','الحالة: '+(r.status||'قيد المراجعة'));
+     if(r.amount!=null&&Number.isFinite(Number(r.amount)))line('p','المبلغ: '+Number(r.amount)+' شيكل');
+     if(r.payment)line('p','الدفع: '+r.payment);
+     if(r.worker)line('p','الموظف المعيّن: '+r.worker);
+     if(r.status==='بانتظار الدفع'){const b=document.createElement('button');b.type='button';b.textContent='الدفع الإلكتروني غير متاح حاليًا';b.onclick=()=>alert('الدفع الإلكتروني غير متاح حالياً.');card.append(b);}
+     host.append(card);
+   }
+ };
+ window.raayaRenderOwnerRequests=renderOwnerRequests;
  const beginOwnerShared=(u)=>{
    ownerSharedUnsub.forEach(fn=>fn());ownerSharedUnsub=[];ownerOverrides.clear();ownerVisitPanel.remove();
-   if(!u)return;
-   const hiddenOff=onValue(ref(db,'raayaAdminHiddenRequests'),snap=>{
-     hiddenRequestKeys=new Set();
-     const v=snap.val()||{};for(const [owner,items] of Object.entries(v))for(const [request,flag] of Object.entries(items||{}))if(flag?.hidden===true)hiddenRequestKeys.add(owner+'/'+request);
-     renderShared();
-   },e=>sharedActionStatus('تعذر قراءة حالة الإخفاء: '+(e.code||e.message)));
-   sharedUnsub.push(hiddenOff);
+   ownerReadUid=u?.uid||null;ownerReadState='loading';
+   if(!u||isFirebaseAdmin(u))return;
+   renderOwnerRequests();
    for(const key of sharedKeys){
      const off=onValue(ref(db,'raayaShared/'+key+'/'+u.uid),snapshot=>{
        if(current()?.uid!==u.uid)return;
-       const rows=Object.values(snapshot.val()||{}).filter(r=>r&&r.ownerUid===u.uid&&r.sourceId);
-       const byId=new Map(rows.map(r=>[String(r.sourceId),r]));
+       const rows=Object.values(snapshot.val()||{}).filter(r=>r&&r.ownerUid===u.uid&&r.sourceId!=null);
+       const byId=new Map(rows.map(r=>[String(r.sourceId),{...r,id:r.id??r.sourceId}]));
        ownerOverrides.set(key,byId);
-       if(key==='requests')renderOwnerVisitConfirm();
-       const existing=local(key);
-       let changed=false;
-       const ownRows=rows.map(r=>({...r,id:r.id??r.sourceId}));
-       const merged=ownRows.map(r=>{
-         const cloud=byId.get(String(recordId(r)));
-         if(!cloud)return r;
-         const fields=['status','amount','worker','workerPhone','adminUpdatedAt'];
-         const next={...r};
-         for(const field of fields)if(Object.prototype.hasOwnProperty.call(cloud,field)&&next[field]!==cloud[field]){next[field]=cloud[field];changed=true;}
-         return next;
-       });
-       if(changed||JSON.stringify(existing)!==JSON.stringify(merged)){loading=true;try{localStorage.setItem(PREFIX+key,JSON.stringify(merged));}finally{loading=false;}
-         try{if(key==='requests'){window.myRequests?.();window.staffView?.();}}catch(e){console.warn(e);}}
-     },e=>say('تعذر قراءة تحديثات الإدارة: '+(e.code||e.message)));
+       loading=true;try{localStorage.setItem(PREFIX+key,JSON.stringify([...byId.values()]));}finally{loading=false;}
+       if(key==='requests'){ownerReadState='ready';renderOwnerRequests();renderOwnerVisitConfirm();}
+     },e=>{if(current()?.uid!==u.uid)return;if(key==='requests'){ownerReadState='error';renderOwnerRequests();}say('تعذر قراءة تحديثات الإدارة: '+(e.code||e.message));});
      ownerSharedUnsub.push(off);
    }
  };
@@ -1161,6 +1169,11 @@ try {
    if(!u)return;
    const token=await u.getIdTokenResult();
    if(current()?.uid!==u.uid || !isFirebaseAdmin(u))return;
+   sharedUnsub.push(onValue(ref(db,'raayaAdminHiddenRequests'),snap=>{
+     if(current()?.uid!==u.uid)return;
+     hiddenRequestKeys=new Set();for(const [owner,items] of Object.entries(snap.val()||{}))for(const [request,flag] of Object.entries(items||{}))if(flag?.hidden===true)hiddenRequestKeys.add(owner+'/'+request);
+     renderShared();
+   },e=>{if(current()?.uid===u.uid)sharedActionStatus('تعذر قراءة حالة الإخفاء: '+(e.code||e.message));}));
    for(const key of sharedKeys){
      const off=onValue(ref(db,'raayaShared/'+key),snap=>{
        const records=Object.values(snap.val()||{}).flatMap(owner=>owner&&typeof owner==='object'?Object.values(owner):[]).filter(v=>v&&typeof v==='object'&&v.ownerUid&&v.sourceId);
@@ -1177,6 +1190,7 @@ try {
 
  const syncWrite=async(key,items)=>{
   if(!KEYS.includes(key)||!current()||loading)return;
+  if(sharedKeys.includes(key)&&!isFirebaseAdmin(current()))return;
   if(!loadedKeys.has(key)){queued.set(key,items);return;}
   // Capture the account at the time of the edit: never redirect a queued write
   // into a different account after sign-out or account switching.
@@ -1200,6 +1214,8 @@ try {
   if(!u)return;
   for(const key of KEYS){
    const off=onValue(ref(db,'raayaAccounts/'+u.uid+'/records/'+key),snapshot=>{
+    if(current()?.uid!==u.uid)return;
+    if(sharedKeys.includes(key)&&!isFirebaseAdmin(u)){loadedKeys.add(key);queued.delete(key);return;}
     const remote=Object.values(snapshot.val()||{}).filter(v=>v&&typeof v==='object');
     // Treat the authenticated administrator's Firebase snapshot as authoritative.
     // Do not revive deleted local test requests in the administration dashboard.
@@ -1297,7 +1313,7 @@ try {
      if(current()?.uid===uid&&hoursLedgerPanel)hoursLedgerPanel.querySelector('[data-hours-error]').textContent='تعذر قراءة الساعات: '+(e.code||e.message)+'؛ راجع قواعد Firebase.';
    });
  };
- onAuthStateChanged(auth,u=>{window.raayaFirebaseSignedIn=!!u;/* لا تحذف سجلات Firebase تلقائياً عند الدخول */const banner=document.getElementById('raayaFirebaseStatus');if(banner&&window.raayaFirebaseConnectionState==='connected'){banner.textContent=u?'Firebase: '+(u.isAnonymous?'حساب تجريبي مجهول':('حساب '+(u.email||'مسجّل')))+' متصل — تحقق من حالة المزامنة':'Firebase: الخادم متصل، لكن يلزم تسجيل دخول Firebase للمزامنة (اضغط هنا)';}beginSubmittedHours(u);beginHoursLedger(u).catch(e=>say('تعذر فتح سجل الساعات: '+(e.code||e.message)));beginSync(u);beginEmployeeAssignments(u);beginShared(u).then(()=>beginOwnerShared(u)).catch(e=>say('فشل قراءة صلاحية الإدارة: '+(e.code||e.message)));say(u?'تم تسجيل الدخول إلى Firebase: '+(u.isAnonymous?'حساب تجريبي مجهول':(u.email||'حساب مسجّل'))+' — مزامنة تجريبية داخل الحساب فقط':'لم يتم تسجيل الدخول إلى Firebase بعد.');document.getElementById('raayaOpenApp').style.display=u?'block':'none';document.getElementById('raayaCloudPanel').style.display='block';document.getElementById('raayaCloudPanel').querySelector('h3').textContent=u?'حساب Firebase المتصل':'المزامنة التجريبية عبر Firebase Anonymous';document.getElementById('raayaCloudLogin').style.display=u?'none':'inline-block';document.getElementById('raayaCloudTest').style.display=u?'inline-block':'none';document.getElementById('raayaCloudLogout').style.display=u?'inline-block':'none';});
+ onAuthStateChanged(auth,u=>{window.raayaFirebaseSignedIn=!!u;/* لا تحذف سجلات Firebase تلقائياً عند الدخول */const banner=document.getElementById('raayaFirebaseStatus');if(banner&&window.raayaFirebaseConnectionState==='connected'){banner.textContent=u?'Firebase: '+(u.isAnonymous?'حساب تجريبي مجهول':('حساب '+(u.email||'مسجّل')))+' متصل — تحقق من حالة المزامنة':'Firebase: الخادم متصل، لكن يلزم تسجيل دخول Firebase للمزامنة (اضغط هنا)';}beginSubmittedHours(u);beginHoursLedger(u).catch(e=>say('تعذر فتح سجل الساعات: '+(e.code||e.message)));beginSync(u);beginEmployeeAssignments(u);beginOwnerShared(u);beginShared(u).catch(e=>say('فشل قراءة صلاحية الإدارة: '+(e.code||e.message)));say(u?'تم تسجيل الدخول إلى Firebase: '+(u.isAnonymous?'حساب تجريبي مجهول':(u.email||'حساب مسجّل'))+' — مزامنة تجريبية داخل الحساب فقط':'لم يتم تسجيل الدخول إلى Firebase بعد.');document.getElementById('raayaOpenApp').style.display=u?'block':'none';document.getElementById('raayaCloudPanel').style.display='block';document.getElementById('raayaCloudPanel').querySelector('h3').textContent=u?'حساب Firebase المتصل':'المزامنة التجريبية عبر Firebase Anonymous';document.getElementById('raayaCloudLogin').style.display=u?'none':'inline-block';document.getElementById('raayaCloudTest').style.display=u?'inline-block':'none';document.getElementById('raayaCloudLogout').style.display=u?'inline-block':'none';});
  document.getElementById('raayaOpenApp').onclick=()=>{
    document.body.classList.add('raaya-app-open'); document.getElementById('raayaCloudPanel')?.style.setProperty('display','none','important'); document.getElementById('raayaFirebaseStatus')?.style.setProperty('display','none','important');
   const login=document.getElementById('login');
@@ -3217,4 +3233,6 @@ const visits=staff?.querySelector('[data-k="visits"]'),tasks=document.getElement
  window.raayaRoleExit=async function(){const btn=document.querySelector('#admin .top button[data-k="exit"]');if(btn)btn.disabled=true;try{await window.raayaWaitForCloud();await window.raayaSignOutFirebase();window.raayaAdminOpen?.(null);prevExit.apply(this,arguments);history.replaceState({raayaRoot:true},'','#login');}catch(e){alert('تعذر تسجيل الخروج من Firebase: '+(e.code||e.message));}finally{if(btn)btn.disabled=false;}};
 })();
 </script>
-</body></html>
+<script id="raaya-27nov-owner-live-view">(function(){
+window.myRequests=function(){show('myrequests');const host=document.getElementById('requestList');if(window.raayaRenderOwnerRequests){window.raayaRenderOwnerRequests();return;}host.textContent='جاري تحميل طلباتك…';};
+})();</script></body></html>
