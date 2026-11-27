@@ -1894,7 +1894,7 @@ run();
   if(/مكتمل|منتهي|completed|finished/i.test(s)||r.raayaVisit?.state==='completed')return 'complete';
   if(/قيد التنفيذ|بدأت|جارية|in.progress/i.test(s)||['started','active','start_wait','end_wait','in_progress','in-progress'].includes(String(r.raayaVisit?.state||'')))return 'progress';
   if(/بانتظار الدفع|awaiting.payment/i.test(s))return 'pay';
-  if(/تم الدفع|مدفوع|^paid$/i.test(s)||/تم الدفع|^paid$|^مدفوع[ة]?$/i.test(String(r.payment||'')))return 'paid';
+  if(/^(تم الدفع(?: تجريبياً)?|مدفوع[ة]?|paid)$/i.test(s.trim())||/^(تم الدفع(?: تجريبياً)?|مدفوع[ة]?|paid)$/i.test(String(r.payment||'').trim()))return 'paid';
   return 'review';
  };
  const hoursType=r=>reject(r.status)?'rejected':/معتمد|approved/i.test(String(r.status||''))?'approved':'pending';
@@ -1923,7 +1923,10 @@ run();
   if(empty){
    if(id==='adminRequests'){
     const count=shared===null?shown:shared;
-    const l=language(),label=translate(category),message=label+' — '+count+(count===0?' — '+translate('empty'):'');
+    const l=language(),label=translate(category);
+    const feed=document.getElementById('raayaSharedAdminFeed');
+    const loading=!!feed&&!feed.hidden&&!Array.isArray(window.raayaAdminSharedRecords?.requests);
+    const message=loading?label+' — '+({ar:'بانتظار تحميل الطلبات من Firebase',en:'Waiting for Firebase requests',he:'ממתין לטעינת בקשות'}[l]||'بانتظار تحميل الطلبات'):label+' — '+count+(count===0?' — '+translate('empty'):'');
     if(empty.textContent!==message)empty.textContent=message;
     empty.style.display='block';empty.hidden=false;
     // The local renderer uses a bare text node for an empty list. Avoid duplicate messages.
@@ -1948,7 +1951,7 @@ run();
  function ensure(id){
   const root=document.getElementById(id);if(!root||document.getElementById('raaya-tabs-'+id))return;
   const tabs=document.createElement('div');tabs.id='raaya-tabs-'+id;tabs.className='raaya-status-tabs';
-  configs[id].forEach(category=>{const b=document.createElement('button');b.type='button';b.dataset.category=category;b.onclick=()=>{chosen[id]=category;apply(id);};tabs.appendChild(b)});
+  configs[id].forEach(category=>{const b=document.createElement('button');b.type='button';b.dataset.category=category;b.onclick=e=>{e.preventDefault();e.stopPropagation();chosen[id]=category;apply(id);};tabs.appendChild(b)});
   root.parentElement.insertBefore(tabs,root);
   const empty=document.createElement('p');empty.id='raaya-empty-'+id;empty.className='raaya-status-empty';empty.hidden=true;root.before(empty);
  }
@@ -2016,7 +2019,7 @@ run();
    const sync=()=>{const loginVisible=!document.getElementById('login')?.classList.contains('hide');
      const welcomeVisible=!document.getElementById('welcome')?.classList.contains('hide');
      bell.classList.toggle('raaya-authenticated-bell',!(loginVisible||welcomeVisible));
-     bell.hidden=loginVisible||welcomeVisible||!userName()||!['client','staff','applicant','admin'].includes(roleName());
+     bell.hidden=loginVisible||welcomeVisible||!(typeof person==='string'&&person)||!['client','staff','applicant','admin'].includes(typeof role==='string'?role:'');
    };
    new MutationObserver(sync).observe(document.getElementById('login'),{attributes:true,attributeFilter:['class']});
    new MutationObserver(sync).observe(document.getElementById('welcome'),{attributes:true,attributeFilter:['class']});
@@ -2394,41 +2397,16 @@ body:has(#login:not(.hide)) #raayaSamarCredit {display:none!important}
 </style>
 <script id="raaya-21nov-session-navigation-fix">
 (function(){
- 'use strict';
- const KEY='raaya_active_view_v2', PANELKEY='raaya_active_admin_panel_v3';
- const panelIds=['workers','visits','payrollRecords'];
- function activePanel(){return panelIds.find(k=>{const e=document.getElementById('raayaAdminPanel_'+k);return e&&!e.hidden})||null}
- function savePanel(){try{const p=activePanel();if(p)sessionStorage.setItem(PANELKEY,p);else sessionStorage.removeItem(PANELKEY)}catch(e){}}
- function restorePanel(){try{const k=sessionStorage.getItem(PANELKEY);if(!panelIds.includes(k))return;
-   if(typeof window.raayaAdminOpen==='function')window.raayaAdminOpen(k);
-   else {const b=document.querySelector('[data-raaya-admin-open="'+k+'"]');if(b)b.click()}
- }catch(e){console.warn('RAAYA panel restore',e)}}
- // The existing session restorer restores the admin dashboard first; restore the actual subpage afterwards.
- const originalOpen=window.raayaAdminOpen;
- if(typeof originalOpen==='function')window.raayaAdminOpen=function(key){
-   const result=originalOpen.apply(this,arguments);
-   if(key===null || key===undefined){if(!sessionStorage.getItem(PANELKEY))savePanel()}
-   else savePanel();
-   return result;
- };
- const originalExit=window.raayaRoleExit;
- if(typeof originalExit==='function')window.raayaRoleExit=function(){sessionStorage.removeItem(PANELKEY);return originalExit.apply(this,arguments)};
- document.addEventListener('click',e=>{
-   const button=e.target.closest('button');if(!button)return;
-   if(button.dataset.k==='exit' || button.textContent.trim()==='خروج'){
-     // Only clear on a real explicit exit, not on reload or initial screen rendering.
-     sessionStorage.removeItem(PANELKEY);
-   }else if(document.getElementById('admin')?.contains(button))setTimeout(savePanel,30);
- },true);
- // Wait for the existing Firebase session restore, then reopen the saved subpage.
- let count=0;
- const timer=setInterval(()=>{
-   if(++count>100){clearInterval(timer);return}
-   const admin=document.getElementById('admin');
-   if(admin&&!admin.classList.contains('hide')&&sessionStorage.getItem(PANELKEY)){
-     clearInterval(timer);restorePanel();
-   }
- },100);
+ const PANELKEY='raaya_active_admin_panel_v3';
+ // Capture only a pre-existing saved panel. Clicks during this session must never initiate restoration.
+ let saved=null;try{saved=sessionStorage.getItem(PANELKEY);}catch(e){}
+ let timer=null;
+ function cancel(){if(timer!==null){clearInterval(timer);timer=null;}saved=null;}
+ function persist(){try{const p=document.querySelector('#admin > [data-final-admin-slot]:not([hidden])');if(p)sessionStorage.setItem(PANELKEY,p.dataset.finalAdminSlot);else sessionStorage.removeItem(PANELKEY);}catch(e){}}
+ document.addEventListener('click',e=>{const b=e.target.closest('#admin button');if(!b)return;cancel();if(b.dataset.k==='exit'){try{sessionStorage.removeItem(PANELKEY)}catch(e){}return;}setTimeout(persist,0);},true);
+ const oldExit=window.raayaRoleExit;
+ if(typeof oldExit==='function')window.raayaRoleExit=function(){cancel();try{sessionStorage.removeItem(PANELKEY)}catch(e){}return oldExit.apply(this,arguments)};
+ if(saved){let count=0;timer=setInterval(()=>{if(++count>100){cancel();return;}const admin=document.getElementById('admin');if(!admin||admin.classList.contains('hide')||!window.raayaVerifiedAdminSession)return;const key=saved;cancel();if([...admin.querySelectorAll('[data-final-admin-slot]')].some(p=>p.dataset.finalAdminSlot===key))window.raayaAdminOpen(key);},100);}
 })();
 </script>
 <style id="raaya-samar-credit-all-pages-final">
