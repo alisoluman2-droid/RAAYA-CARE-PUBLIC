@@ -992,6 +992,15 @@ try {
    const anchor=document.getElementById('adminJobs');if(!anchor)return;
    let panel=document.getElementById('raayaSharedJobsFeed');if(!panel){panel=document.createElement('div');panel.id='raayaSharedJobsFeed';anchor.after(panel);}
    panel.replaceChildren();const rows=sharedCache.get('jobs')||[];
+   const workersSlot=document.querySelector('#admin [data-final-admin-slot="workers"]');
+   if(workersSlot){
+     let accepted=document.getElementById('raayaSharedAcceptedWorkers');
+     if(!accepted){accepted=document.createElement('div');accepted.id='raayaSharedAcceptedWorkers';workersSlot.append(accepted);}
+     const title=document.createElement('h3');title.textContent='طلبات التوظيف المقبولة';accepted.replaceChildren(title);
+     const unique=new Map();for(const r of rows){if(r.status==='مقبول'&&r.ownerUid)unique.set(r.ownerUid,r);}
+     for(const r of unique.values()){const card=document.createElement('div');card.className='pill';const name=document.createElement('b');name.textContent=r.name||'بدون اسم';const details=document.createElement('p');details.textContent=[r.city,r.phone,'مقبول'].filter(Boolean).join(' — ');card.append(name,details);accepted.append(card);}
+     if(!unique.size){const empty=document.createElement('p');empty.textContent='لا توجد طلبات توظيف مقبولة.';accepted.append(empty);}
+   }
    for(const r of rows){const card=document.createElement('div');card.className='pill';card.dataset.sharedStatus=r.status||'قيد المراجعة';const info=document.createElement('p');info.textContent=[r.name,r.city,r.phone,r.status].filter(Boolean).join(' — ');card.append(info);
      if(!r.status||r.status==='قيد المراجعة')for(const [label,next] of [['قبول طلب التوظيف','مقبول'],['رفض الطلب','مرفوض']]){const b=document.createElement('button');b.type='button';b.textContent=label;if(next==='مرفوض')b.className='raaya-reject';b.onclick=async()=>{if(!isFirebaseAdmin(current()))return;b.disabled=true;try{const result=await runTransaction(ref(db,'raayaShared/jobs/'+r.ownerUid+'/'+r.sourceId),old=>old&&(!old.status||old.status==='قيد المراجعة')?{...old,status:next,adminUpdatedAt:Date.now()}:undefined,{applyLocally:false});if(!result.committed)alert('لم يتم تعديل الطلب');}catch(e){alert('تعذر حفظ القرار: '+(e.code||e.message))}finally{b.disabled=false}};card.append(b)}panel.append(card);
    }
@@ -1117,7 +1126,7 @@ try {
    },e=>{employeeAssignmentPanel.querySelector('#raayaEmployeeCloudRows').textContent='تعذر قراءة الزيارات: تحقق من صلاحيات Firebase';});
  };
  const beginShared=async(u)=>{
-   sharedUnsub.forEach(fn=>fn());sharedUnsub=[];sharedCache.clear();hiddenRequestKeys.clear();sharedPanel.remove();document.getElementById('raayaSharedJobsFeed')?.remove();document.getElementById('raayaSharedPaymentsFeed')?.remove();window.raayaAdminSharedRecords=undefined;
+   sharedUnsub.forEach(fn=>fn());sharedUnsub=[];sharedCache.clear();hiddenRequestKeys.clear();sharedPanel.remove();document.getElementById('raayaSharedJobsFeed')?.remove();document.getElementById('raayaSharedPaymentsFeed')?.remove();document.getElementById('raayaSharedAcceptedWorkers')?.remove();window.raayaAdminSharedRecords=undefined;
    if(!u)return;
    const token=await u.getIdTokenResult();
    if(current()?.uid!==u.uid || !isFirebaseAdmin(u))return;
@@ -1935,8 +1944,12 @@ run();
   if(busy)return;busy=true;
   try{
    const seen=new Set();
+   const finalButtons=[...menu.querySelectorAll('button[data-final-admin-key]')];
+   const finalNames=new Set(finalButtons.map(button=>normalize(button.textContent)));
    menu.querySelectorAll('button').forEach(button=>{
     const name=normalize(button.textContent);
+    if(button.dataset.finalAdminKey){button.hidden=false;return;}
+    if(finalNames.has(name)){button.hidden=true;return;}
     if(!name)return;
     // Only collapse duplicates of the two agreed admin sections.
     if(name==='إدارة الموظفين'||name==='سجل الموظفين ومتابعة الزيارات'){
@@ -2152,9 +2165,8 @@ body:has(#login:not(.hide)) #raayaSamarCredit{display:none!important}
 </script>
 <style id="raaya-21nov-targeted-admin-fix">
 /* Hide the admin-level Exit only while a subpage is displayed. */
-#admin:has(#raayaAdminPanel_workers:not([hidden])) > .top > button[data-k="exit"],
-#admin:has(#raayaAdminPanel_visits:not([hidden])) > .top > button[data-k="exit"],
-#admin:has(#raayaAdminPanel_payrollRecords:not([hidden])) > .top > button[data-k="exit"]{display:none!important}
+#admin:has(> #raayaAdminMenu[hidden]) > .top > button[data-k="exit"]{display:none!important}
+#admin:has(> #raayaAdminMenu:not([hidden])) > .top > button[data-k="exit"]{display:inline-block!important;visibility:visible!important}
 /* The credit belongs to the landing screen and must not be suppressed by older styles. */
 body:has(#welcome:not(.hide)) #raayaSamarCredit{display:block!important;visibility:visible!important}
 </style>
