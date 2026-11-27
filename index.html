@@ -699,7 +699,7 @@ try {
  const cfg=JSON.parse(document.getElementById('raaya-firebase-config').textContent);
  const {initializeApp,getApps}=await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js');
  const app=getApps().find(a=>a.name==='[DEFAULT]')||initializeApp(cfg);
- const [{getAuth,signInWithEmailAndPassword,signInWithPhoneNumber,RecaptchaVerifier,signOut,onAuthStateChanged},{getDatabase,ref,set,get,onValue,update,runTransaction}]=await Promise.all([
+ const [{getAuth,signInWithEmailAndPassword,signInAnonymously,signOut,onAuthStateChanged},{getDatabase,ref,set,get,onValue,update,runTransaction}]=await Promise.all([
  import('https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js'),
  import('https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js')]);
  const auth=getAuth(app),db=getDatabase(app);
@@ -742,8 +742,12 @@ try {
  };
 
  // Preview-only anonymous session. Do not impersonate the existing admin Firebase users.
- const ensurePreviewAuth=async()=>{if(current()&&!current().isAnonymous)return current();throw Error('يلزم التحقق من رقم الهاتف أولاً');};
- window.raayaPhoneAuth={auth,signOut,signInWithPhoneNumber,RecaptchaVerifier};
+ let anonymousPending=null;
+ const ensurePreviewAuth=async()=>{
+   if(current())return current();
+   if(!anonymousPending)anonymousPending=signInAnonymously(auth).then(result=>result.user).finally(()=>{anonymousPending=null;});
+   return anonymousPending;
+ };
 
  // Authenticated per-account synchronization. No unauthenticated/public database writes.
  // Records remain on this device if the connection or database rules reject a write.
@@ -1381,7 +1385,7 @@ window.raayaCloudSaveRequest=save;
   if(admins.has(n)){
    person=n;wrap.classList.remove('hide');loginButton.textContent='دخول';codeEl.focus();return;
   }
-  resetCode();window.raayaStartSms(n,p);
+  resetCode();person=n;role='client';window.show('welcome');
  };
  document.getElementById('raayaAdminConfirm').onclick=async function(){
   if(!admins.has(norm(nameEl.value))||!phoneEl.value.trim()){resetCode();return;}
@@ -2210,7 +2214,7 @@ window.raayaIsRemovedDemoRequest=function(record){
    try{
      if(state.role==='admin'){
        const {getApps,initializeApp}=await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js');
-       const {getAuth}=await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js');
+       const {getAuth,authStateReady}=await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js');
        const config=JSON.parse(document.getElementById('raaya-firebase-config').textContent);
        const app=getApps().find(a=>a.name==='[DEFAULT]')||initializeApp(config);
        const auth=getAuth(app);
@@ -2223,11 +2227,6 @@ window.raayaIsRemovedDemoRequest=function(record){
        window.show('admin');
        if(typeof window.raayaAdminOpen==='function')window.raayaAdminOpen(null);
      }else{
-       const {getAuth}=await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js');
-       const {getApps,initializeApp}=await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js');
-       const a=getAuth(getApps().find(a=>a.name==='[DEFAULT]')||initializeApp(JSON.parse(document.getElementById('raaya-firebase-config').textContent)));
-       await a.authStateReady();
-       if(!a.currentUser?.phoneNumber || a.currentUser.phoneNumber!==state.phone){clear();return;}
        person=state.name;role=state.role==='staff'?'staff':'client';
        document.getElementById('loginName').value=state.name;
        document.getElementById('loginPhone').value=state.phone||'';
@@ -3155,30 +3154,5 @@ const visits=staff?.querySelector('[data-k="visits"]'),tasks=document.getElement
  const assigned=document.getElementById('raayaAssignedVisitsToggle');
  if(assigned){assigned.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();const panel=document.getElementById('raayaEmployeeCloudAssignments');if(!panel){assigned.setAttribute('aria-expanded','false');return;}assigned.after(panel);const opening=panel.hidden||getComputedStyle(panel).display==='none';panel.hidden=!opening;panel.style.display=opening?'block':'none';assigned.setAttribute('aria-expanded',String(opening));},true);}
  const bank=document.getElementById('raayaBankToggle');if(bank){bank.addEventListener('click',()=>{const panel=document.getElementById('raayaSecureBankPanel');if(panel&&panel.parentElement!==staff)bank.after(panel);},false);}
-})();
-</script><script id="raaya-real-sms-27nov">
-(()=>{
- const login=document.getElementById('login'), name=document.getElementById('loginName'), phone=document.getElementById('loginPhone');
- const btn=login.querySelector('button[onclick="enter()"]');
- const panel=document.createElement('div');panel.hidden=true;
- panel.innerHTML='<label>رمز التحقق SMS</label><input id="raayaSmsCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6"><button type="button" id="raayaSmsConfirm">تأكيد ودخول</button><div id="raayaSmsCaptcha"></div>';
- const msg=document.createElement('p');msg.setAttribute('role','status');btn.after(panel,msg);
- let verifier,confirmation,verifiedName,verifiedPhone,busy=false;
- function reset(){confirmation=null;panel.hidden=true;panel.querySelector('input').value='';if(verifier){verifier.clear();verifier=null;}msg.textContent='';}
- name.addEventListener('input',reset);phone.addEventListener('input',reset);
- window.raayaStartSms=async(n,p)=>{
- if(busy)return;reset();const number=p.replace(/[\s()-]/g,'');
- if(!/^\+(970|972)\d{8,9}$/.test(number)){msg.textContent='أدخل رقم الهاتف بالصيغة الدولية +970 أو +972 دون الصفر الأول';return;}
- const api=window.raayaPhoneAuth;if(!api){msg.textContent='خدمة Firebase غير جاهزة، حاول مجدداً';return;}
- busy=true;btn.disabled=true;name.disabled=phone.disabled=true;panel.hidden=false;msg.textContent='جاري إرسال رمز التحقق…';
- try{await api.auth.authStateReady();if(api.auth.currentUser)await api.signOut(api.auth);window.raayaVerifiedAdminSession=false;
- verifier=new api.RecaptchaVerifier(api.auth,'raayaSmsCaptcha',{size:'normal'});
- confirmation=await api.signInWithPhoneNumber(api.auth,number,verifier);verifiedName=n;verifiedPhone=number;msg.textContent='أدخل الرمز الذي وصلك برسالة SMS';
- }catch(e){reset();msg.textContent='تعذر إرسال الرسالة: '+(e.code||e.message);}
- finally{busy=false;btn.disabled=false;name.disabled=phone.disabled=false;}
- };
- panel.querySelector('button').onclick=async function(){if(!confirmation||busy)return;const code=panel.querySelector('input').value.trim();if(!/^\d{6}$/.test(code)){msg.textContent='أدخل الرمز المكون من ستة أرقام';return;}busy=true;this.disabled=true;name.disabled=phone.disabled=true;
- try{const result=await confirmation.confirm(code);if(result.user.phoneNumber!==verifiedPhone)throw Error('رقم الهاتف غير مطابق');person=verifiedName;phone.value=verifiedPhone;role='client';reset();window.show('welcome');}catch(e){msg.textContent='تعذر التحقق: '+(e.code||e.message);}finally{busy=false;this.disabled=false;name.disabled=phone.disabled=false;}};
- const oldExit=window.raayaRoleExit;window.raayaRoleExit=function(){reset();const api=window.raayaPhoneAuth;if(api)api.signOut(api.auth).catch(console.warn);return oldExit.apply(this,arguments);};
 })();
 </script></body></html>
