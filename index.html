@@ -3,7 +3,7 @@
 <html dir="rtl" lang="ar"><head><meta charset="utf-8"/><meta content="width=device-width,initial-scale=1" name="viewport"/><title>RAAYA CARE</title><script id="raaya-local-clean-start-27nov">
 (function(){
  try{
-  const marker='raaya_local_cleanup_20261127_v1';
+  const marker='raaya_local_cleanup_20261127_v2';
   if(localStorage.getItem(marker)==='1')return;
   const prefix='raaya_nov7_clean_trial_20261107_';
   const keys=['requests','jobs','hours','employeeBankDemo','salaryRates','salaryRecords'];
@@ -1145,10 +1145,10 @@ try {
   for(const key of KEYS){
    const off=onValue(ref(db,'raayaAccounts/'+u.uid+'/records/'+key),snapshot=>{
     const remote=Object.values(snapshot.val()||{}).filter(v=>v&&typeof v==='object');
-    // Preserve locally submitted requests when the remote snapshot is empty or delayed.
-    // The UI is a preview, not an authenticated multi-account inbox.
+    // Treat the authenticated administrator's Firebase snapshot as authoritative.
+    // Do not revive deleted local test requests in the administration dashboard.
     const merged=new Map();
-    if(key==='requests')for(const r of local(key)){const id=recordId(r);if(id)merged.set(id,r);}
+    if(key==='requests'&&!isFirebaseAdmin(u))for(const r of local(key)){const id=recordId(r);if(id)merged.set(id,r);}
     for(const r of remote){const id=recordId(r);if(id){
       const shared=ownerOverrides.get(key)?.get(String(id));
       const fields=['status','amount','worker','workerPhone','adminUpdatedAt'];
