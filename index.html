@@ -1282,8 +1282,8 @@ try {
   return true;
  };
  window.raayaCloudSaveJob=async(item)=>{
-  const u=await ensurePreviewAuth();
-  if(!u)throw Error('تعذّر تسجيل الدخول إلى Firebase');
+  const u=current();
+  if(!u||u.isAnonymous)throw Error('يلزم تسجيل الدخول بحساب Firebase');
   const id=String(item.id);
   if(!/^[A-Za-z0-9_-]+$/.test(id))throw Error('معرّف الطلب غير صالح');
   const path='raayaShared/jobs/'+u.uid+'/'+id;
@@ -1385,7 +1385,7 @@ window.raayaCloudSaveRequest=save;
   if(admins.has(n)){
    person=n;wrap.classList.remove('hide');loginButton.textContent='دخول';codeEl.focus();return;
   }
-  resetCode();person=n;role='client';window.show('welcome');
+  resetCode();person=n;role='client';window.raayaPersonalLogin(n,p);
  };
  document.getElementById('raayaAdminConfirm').onclick=async function(){
   if(!admins.has(norm(nameEl.value))||!phoneEl.value.trim()){resetCode();return;}
@@ -2227,7 +2227,8 @@ window.raayaIsRemovedDemoRequest=function(record){
        window.show('admin');
        if(typeof window.raayaAdminOpen==='function')window.raayaAdminOpen(null);
      }else{
-       person=state.name;role=state.role==='staff'?'staff':'client';
+       const a=await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js');const f=await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js');const auth=f.getAuth(a.getApps().find(x=>x.name==='[DEFAULT]')||a.initializeApp(JSON.parse(document.getElementById('raaya-firebase-config').textContent)));await auth.authStateReady();if(!auth.currentUser||auth.currentUser.isAnonymous||!auth.currentUser.email?.endsWith('@accounts.raayacare.invalid')){clear();return;}
+       person=auth.currentUser.displayName||state.name;role=state.role==='staff'?'staff':'client';
        document.getElementById('loginName').value=state.name;
        document.getElementById('loginPhone').value=state.phone||'';
        if(state.role==='staff'||state.role==='applicant'){
@@ -3154,5 +3155,18 @@ const visits=staff?.querySelector('[data-k="visits"]'),tasks=document.getElement
  const assigned=document.getElementById('raayaAssignedVisitsToggle');
  if(assigned){assigned.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();const panel=document.getElementById('raayaEmployeeCloudAssignments');if(!panel){assigned.setAttribute('aria-expanded','false');return;}assigned.after(panel);const opening=panel.hidden||getComputedStyle(panel).display==='none';panel.hidden=!opening;panel.style.display=opening?'block':'none';assigned.setAttribute('aria-expanded',String(opening));},true);}
  const bank=document.getElementById('raayaBankToggle');if(bank){bank.addEventListener('click',()=>{const panel=document.getElementById('raayaSecureBankPanel');if(panel&&panel.parentElement!==staff)bank.after(panel);},false);}
+})();
+</script><script id="raaya-personal-code-login">
+(()=>{
+ const screen=document.getElementById('login'), button=screen.querySelector('button[onclick="enter()"]');
+ const panel=document.createElement('div');panel.className='hide';panel.innerHTML='<label for="raayaPersonalCode">رمز الدخول الخاص (8 أحرف أو أرقام على الأقل)</label><input id="raayaPersonalCode" type="password" autocomplete="current-password" minlength="8" maxlength="128"><button type="button" id="raayaPersonalSignIn">تأكيد ودخول</button><button type="button" class="secondary" id="raayaPersonalRegister">إنشاء حساب جديد</button><p class="error" role="alert"></p>';button.after(panel);
+ const code=panel.querySelector('input'),msg=panel.querySelector('p');let identity=null;
+ const normalizePhone=p=>{let v=p.replace(/[\s()\-]/g,'');if(v.startsWith('00'))v='+'+v.slice(2);if(/^05\d{8}$/.test(v))throw Error('أدخل رقم الهاتف مع مفتاح الدولة +970 أو +972');if(!/^\+[1-9]\d{7,14}$/.test(v))throw Error('أدخل رقم الهاتف مع مفتاح الدولة');return v.slice(1);};
+ window.raayaPersonalLogin=(n,p)=>{try{identity={n,email:normalizePhone(p)+'@accounts.raayacare.invalid'};panel.classList.remove('hide');msg.textContent='';code.focus()}catch(e){alert(e.message)}};
+ for(const id of ['loginName','loginPhone'])document.getElementById(id).addEventListener('input',()=>{identity=null;panel.classList.add('hide');code.value='';msg.textContent=''});
+ async function authApi(){const a=await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js');const f=await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js');const app=a.getApps().find(x=>x.name==='[DEFAULT]')||a.initializeApp(JSON.parse(document.getElementById('raaya-firebase-config').textContent));return {f,auth:f.getAuth(app)}}
+ async function submit(register){if(!identity)return;const who=identity,secret=code.value;if(secret.length<8){msg.textContent='اختر رمزاً خاصاً من 8 أحرف أو أرقام على الأقل';return}const buttons=[...panel.querySelectorAll('button')];buttons.forEach(b=>b.disabled=true);try{const {f,auth}=await authApi();await auth.authStateReady();await f.signOut(auth);const result=await (register?f.createUserWithEmailAndPassword(auth,who.email,secret):f.signInWithEmailAndPassword(auth,who.email,secret));if(identity!==who){await f.signOut(auth);return}if(register)await f.updateProfile(result.user,{displayName:who.n});person=result.user.displayName||who.n;role='client';window.raayaVerifiedAdminSession=false;code.value='';panel.classList.add('hide');window.show('welcome')}catch(e){msg.textContent='تعذر الدخول: '+(e.code||e.message)}finally{buttons.forEach(b=>b.disabled=false)}}
+ panel.querySelector('#raayaPersonalSignIn').onclick=()=>submit(false);panel.querySelector('#raayaPersonalRegister').onclick=()=>submit(true);
+ const exit=window.raayaRoleExit;window.raayaRoleExit=async function(){try{const {f,auth}=await authApi();await f.signOut(auth)}catch(e){alert('تعذر تسجيل الخروج');return}identity=null;code.value='';panel.classList.add('hide');return exit.apply(this,arguments)};
 })();
 </script></body></html>
