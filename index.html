@@ -83,7 +83,7 @@ body:has(#login:not(.hide)) #raayaSamarCredit {display:none}
      if(!section)return;
      if(typeof window.show==='function')window.show(target);
      else {
-       document.querySelectorAll('main section').forEach(el=>el.classList.add('hide'));
+       document.querySelectorAll('main > section').forEach(el=>el.classList.add('hide'));
        section.classList.remove('hide');
      }
    });
@@ -853,8 +853,8 @@ try {
  let hiddenRequestKeys=new Set();
  let ownerSharedUnsub=[];
  let employeeAssignmentUnsub=null;
- const employeeAssignmentPanel=document.createElement('section');
- employeeAssignmentPanel.className='card';employeeAssignmentPanel.hidden=true;employeeAssignmentPanel.style.display='none';employeeAssignmentPanel.id='raayaEmployeeCloudAssignments';
+ const employeeAssignmentPanel=document.getElementById('raayaEmployeeCloudAssignments')||document.createElement('div');
+ employeeAssignmentPanel.className='card';employeeAssignmentPanel.id='raayaEmployeeCloudAssignments';employeeAssignmentPanel.classList.remove('hide');if(!employeeAssignmentPanel.isConnected){employeeAssignmentPanel.hidden=true;employeeAssignmentPanel.style.display='none';}
  employeeAssignmentPanel.innerHTML='<h3>زياراتي المسندة</h3><div id="raayaEmployeeCloudRows">جاري التحقق من الحساب…</div>';
  document.getElementById('raayaAssignedVisitsToggle')?.after(employeeAssignmentPanel);
  const ownerOverrides=new Map();
@@ -1097,6 +1097,7 @@ try {
          const edit=document.createElement('button');edit.className='secondary';edit.textContent='تعديل البيانات';edit.disabled=terminal(r);edit.onclick=()=>updateShared(key,id,'edit');box.append(edit);
          { const del=document.createElement('button');del.className='raaya-reject';del.textContent='حذف الطلب بعد انتهاء الرعاية';del.disabled=!(r.status==='مكتملة'&&r.raayaVisit?.state==='completed');if(del.disabled)del.title='يتفعّل بعد اكتمال الرعاية';del.onclick=()=>updateShared(key,id,'delete');box.append(del); }
          if(r.employeeUid&&r.raayaVisit?.state==='completed'&&r.raayaVisit?.source==='confirmed-cloud-events'){const sync=document.createElement('button');sync.className='secondary';sync.textContent='مزامنة الساعات المعتمدة (Firebase)';sync.onclick=async()=>{sync.disabled=true;try{await syncApprovedVisitHours(r);}finally{sync.disabled=false;}};box.append(sync);}
+         if(r.employeeUid&&!terminal(r)){const check=document.createElement('button');check.type='button';check.className='secondary';check.textContent='فحص ربط الزيارة بالموظف';check.onclick=async()=>{check.disabled=true;const u=current();try{if(!isFirebaseAdmin(u))throw Error('يلزم دخول الإدارة');const live=(await get(ref(db,requestPath(r)))).val();if(!live||terminal(live)||live.employeeUid!==r.employeeUid||live.ownerUid!==r.ownerUid||String(live.sourceId)!==String(r.sourceId))throw Error('تغير الطلب؛ أعد فتحه');const uid=String(live.employeeUid),rid=String(live.sourceId);if(!uid||!rid||safeId(uid)!==uid||safeId(rid)!==rid)throw Error('معرّف غير صالح');const projection=ref(db,'raayaEmployeeAssignments/'+uid+'/'+rid);const existing=(await get(projection)).val();if(existing){if(existing.employeeUid!==uid||existing.ownerUid!==live.ownerUid||String(existing.requestId)!==rid)throw Error('سجل الإسناد غير مطابق؛ راجع الإدارة');alert('الزيارة محفوظة في حساب الموظف على Firebase. افتح التطبيق من الحساب نفسه الذي قدّم طلب التوظيف المقبول.');return;}const jobs=(await get(ref(db,'raayaShared/jobs/'+uid))).val()||{};if(!Object.values(jobs).some(j=>j&&j.ownerUid===uid&&['مقبول','مقبولة','accepted'].includes(String(j.status).trim())))throw Error('لا يوجد طلب توظيف مقبول لهذا الحساب');if(current()?.uid!==u.uid)throw Error('تغير حساب الإدارة');const latest=(await get(ref(db,requestPath(r)))).val();if(JSON.stringify(latest)!==JSON.stringify(live))throw Error('تغير الطلب؛ أعد الفحص');const result=await runTransaction(projection,old=>old===null?assignmentData(live):undefined,{applyLocally:false});alert(result.committed?'تم إصلاح سجل الإسناد في حساب الموظف.':'سجل الإسناد موجود بالفعل؛ أعد الفحص.');}catch(e){alert('تعذر فحص الإسناد: '+(e.code||e.message));}finally{check.disabled=false;}};box.append(check);}
          if(r.employeeUid){const verify=document.createElement('button');verify.className='secondary';verify.textContent='فحص واعتماد الزيارة المؤكدة (Firebase)';verify.onclick=async()=>{verify.disabled=true;try{await approveConfirmedVisit(r);}finally{verify.disabled=false;}};box.append(verify);}
        }
        target.append(box);
@@ -1254,15 +1255,15 @@ try {
    }
  };
  let tasksLoaded=false,eventsLoaded=false;
- const refreshTasks=()=>{const t=tasksTarget();if(!t)return;if(tasksLoaded&&eventsLoaded)paintTaskRows();};
+ let taskEventError=false,taskAssignmentError=false;const refreshTasks=()=>{const t=tasksTarget();if(!t)return;if(taskAssignmentError){t.textContent='تعذر قراءة الزيارات من Firebase. راجع صلاحيات حساب الموظف.';return;}if(!tasksLoaded)return;if(!taskRows.length){t.textContent='لا توجد زيارات مسندة لمعرّف هذا الحساب. راجع ربط حساب الموظف مع الإدارة.';return;}if(eventsLoaded){paintTaskRows().catch(()=>{t.textContent='تعذر عرض حالة الزيارات.';});return;}t.replaceChildren();const note=document.createElement('p');note.textContent=taskEventError?'تعذر تحميل حالة بدء وإنهاء الزيارة؛ الزيارات المسندة ظاهرة للقراءة فقط.':'جاري تحميل حالة الزيارات…';t.append(note);for(const r of taskRows.filter(taskEligible)){const row=document.createElement('div');row.className='pill';row.textContent=visitInfo(r);t.append(row);}};
  window.raayaRefreshCloudTasks=refreshTasks;
  const beginEmployeeAssignments=(u)=>{
    if(employeeAssignmentUnsub){employeeAssignmentUnsub();employeeAssignmentUnsub=null;}
    if(employeeEventUnsub){employeeEventUnsub();employeeEventUnsub=null;}
    if(taskTimer){clearInterval(taskTimer);taskTimer=null;}
-   ++taskVersion;taskRows=[];taskEvents={};tasksLoaded=false;eventsLoaded=false;
+   ++taskVersion;taskRows=[];taskEvents={};tasksLoaded=false;eventsLoaded=false;taskEventError=false;taskAssignmentError=false;
    const toggle=document.getElementById('raayaAssignedVisitsToggle');
-   if(!employeeAssignmentPanel.isConnected&&toggle)toggle.after(employeeAssignmentPanel);
+   if(toggle&&toggle.nextElementSibling!==employeeAssignmentPanel)toggle.after(employeeAssignmentPanel);
    setVisitMessage('سجل الدخول بحساب الموظف لعرض الزيارات');
    if(!u||isFirebaseAdmin(u))return;
    setVisitMessage('جاري تحميل الزيارات…');
@@ -1274,8 +1275,8 @@ try {
      if(!taskRows.length)target.textContent='لا توجد زيارات مسندة لمعرّف هذا الحساب. تحقق من حساب الموظف الموثق.';
      for(const r of taskRows){const div=document.createElement('div');div.className='pill';div.textContent=visitInfo(r);target.append(div);}
      refreshTasks();
-   },()=>{if(current()?.uid!==u.uid)return;tasksLoaded=false;taskRows=[];++taskVersion;setVisitMessage('تعذر قراءة الزيارات: تحقق من صلاحيات Firebase');});
-   employeeEventUnsub=onValue(ref(db,'raayaVisitEventProposals/'+u.uid),snap=>{if(current()?.uid!==u.uid)return;taskEvents=snap.val()||{};eventsLoaded=true;refreshTasks();},()=>{if(current()?.uid!==u.uid)return;eventsLoaded=false;++taskVersion;const t=tasksTarget();if(t)t.textContent='تعذر التحقق من حالة الزيارات. تحقق من الاتصال والصلاحيات.';});
+   },()=>{if(current()?.uid!==u.uid)return;tasksLoaded=false;taskAssignmentError=true;taskRows=[];++taskVersion;setVisitMessage('تعذر قراءة الزيارات: تحقق من صلاحيات Firebase');});
+   employeeEventUnsub=onValue(ref(db,'raayaVisitEventProposals/'+u.uid),snap=>{if(current()?.uid!==u.uid)return;taskEvents=snap.val()||{};eventsLoaded=true;refreshTasks();},()=>{if(current()?.uid!==u.uid)return;eventsLoaded=false;taskEventError=true;++taskVersion;refreshTasks();});
    taskTimer=setInterval(refreshTasks,15000);
  };
  const beginShared=async(u)=>{
@@ -1437,7 +1438,7 @@ try {
   if(!login){say('تعذّر العثور على شاشة الدخول');return;}
   try{if(typeof window.show==='function')window.show('login');}catch(e){console.warn('Navigation:',e);}
   // Make the login screen visible even if a legacy navigation wrapper blocks it.
-  document.querySelectorAll('main section').forEach(section=>{if(section!==login)section.classList.add('hide');});
+  document.querySelectorAll('main > section').forEach(section=>{if(section!==login)section.classList.add('hide');});
   login.classList.remove('hide');
   // Do not leave an inline display override: it defeats .hide on later screens.
   login.style.removeProperty('display');
@@ -3322,14 +3323,14 @@ window.raayaOpenSecureBank=async function(button){
  const staff=document.getElementById('staff');if(!staff)return;
  const tasks=document.getElementById('workerTasks'),tasksBtn=staff.querySelector('[data-k="visits"]'),assigned=document.getElementById('raayaAssignedVisitsToggle');
  const local=document.getElementById('raayaLocalVisitRows');if(local)local.hidden=true;
- const taskContent=document.createElement('div');taskContent.id='raayaCloudTaskRows';taskContent.textContent='جاري الاتصال بخدمة Firebase…';
+ const taskContent=document.createElement('div');taskContent.id='raayaCloudTaskRows';taskContent.textContent='جاري الاتصال بخدمة Firebase…';const fallback=document.createElement('div');fallback.id='raayaEmployeeCloudAssignments';fallback.className='card';fallback.hidden=true;fallback.style.display='none';fallback.innerHTML='<h3>زياراتي المسندة</h3><div id="raayaEmployeeCloudRows">جاري الاتصال بخدمة Firebase…</div>';assigned.after(fallback);
  const taskTitle=document.createElement('h3');taskTitle.textContent='متابعة مهامي وزياراتي';tasks.prepend(taskTitle,taskContent);
- const toggle=(p,b,open)=>{if(!p)return;p.hidden=!open;p.style.display=open?'block':'none';b?.setAttribute('aria-expanded',String(open));};
+ const toggle=(p,b,open)=>{if(!p)return;p.classList.remove('hide');p.hidden=!open;p.style.display=open?'block':'none';b?.setAttribute('aria-expanded',String(open));};
  function cloudPanel(){return document.getElementById('raayaEmployeeCloudAssignments');}
  function openVisits(b){
   const p=cloudPanel(),isTasks=b===tasksBtn,open=b.getAttribute('aria-expanded')!=='true';
   toggle(tasks,tasksBtn,isTasks&&open);toggle(p,assigned,!isTasks&&open);
-  if(isTasks&&open)window.raayaRefreshCloudTasks?.();
+  if(isTasks&&open)window.raayaRefreshCloudTasks?.();if(open&&!window.raayaRefreshCloudTasks){const target=isTasks?taskContent:p?.querySelector('#raayaEmployeeCloudRows');setTimeout(()=>{if(target&&!window.raayaRefreshCloudTasks)target.textContent='تعذر الاتصال بخدمة Firebase. تحقق من الإنترنت وأعد فتح التطبيق.';},8000);}
   if(!isTasks){assigned.setAttribute('aria-expanded',String(open&&!!p));if(!p&&open)alert('جاري الاتصال بخدمة Firebase. حاول فتح القسم بعد اكتمال الاتصال.');}
  }
  for(const b of [tasksBtn,assigned])if(b)b.onclick=()=>openVisits(b);
