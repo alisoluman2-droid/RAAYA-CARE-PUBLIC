@@ -749,29 +749,30 @@ try {
  const beginSubmittedHours=(u)=>{
   if(submittedHoursOff){submittedHoursOff();submittedHoursOff=null;}
   const adminBox=document.getElementById('adminHours');
-  document.getElementById('raayaSubmittedHoursFeed')?.remove();
+  document.getElementById('raayaSubmittedHoursFeed')?.remove();window.raayaApplySharedFilters?.();
   if(!u||u.isAnonymous||!['FZbVofv8lFWtjSXPDsIRngYmK8H3','I2m6vtkc0VX3xs3OWhbZ4vMg7SE3'].includes(u.uid)||!adminBox)return;
-  const box=document.createElement('div');box.id='raayaSubmittedHoursFeed';
-  adminBox.insertAdjacentElement('afterend',box);
+  const box=document.createElement('div');box.id='raayaSubmittedHoursFeed';box.dataset.loadState='loading';
+  adminBox.insertAdjacentElement('afterend',box);window.raayaApplySharedFilters?.();
   submittedHoursOff=onValue(ref(db,'raayaSubmittedHours'),snap=>{
-   box.replaceChildren();
+   if(current()?.uid!==u.uid||!box.isConnected)return;
+   box.replaceChildren();box.dataset.loadState='ready';
    const heading=document.createElement('h4');heading.textContent='ساعات الموظفين الواردة من Firebase';box.append(heading);
    const entries=[];
    const seen=new Set();
    for(const [uid,items] of Object.entries(snap.val()||{}))for(const [id,r] of Object.entries(items||{})){
     if(!r||typeof r!=='object'||seen.has(uid+'/'+id))continue;
     seen.add(uid+'/'+id);
-    entries.push({uid,r});
+    entries.push({uid,id,r});
    }
    entries.sort((a,b)=>Number(b.r.submittedAt||0)-Number(a.r.submittedAt||0));
-   for(const {uid,r} of entries){
-    const line=document.createElement('div');line.className='pill';
+   for(const {uid,id,r} of entries){
+    const line=document.createElement('div');line.className='pill';line.dataset.sharedStatus=r.status||'قيد المراجعة';
     line.textContent=[r.employee||uid,r.date,Number(r.hours??r.h)+' ساعات',r.status||'قيد المراجعة'].join(' — ');
-    if(r.status==='قيد المراجعة')for(const [title,status] of [['اعتماد الساعات','معتمدة'],['رفض الساعات','مرفوضة']]){const b=document.createElement('button');b.type='button';b.textContent=title;b.onclick=async()=>{if(!isFirebaseAdmin(current()))return;b.disabled=true;try{const result=await runTransaction(ref(db,'raayaSubmittedHours/'+uid+'/'+r.id),old=>old&&old.status==='قيد المراجعة'?{...old,status,reviewedBy:current().uid,reviewedAt:Date.now()}:undefined,{applyLocally:false});if(!result.committed)alert('لم يتم اعتماد التعديل');}catch(e){alert('تعذر حفظ حالة الساعات: '+(e.code||e.message))}finally{b.disabled=false}};line.append(b)}
+    if(r.status==='قيد المراجعة')for(const [title,status] of [['اعتماد الساعات','معتمدة'],['رفض الساعات','مرفوضة']]){const b=document.createElement('button');b.type='button';b.textContent=title;b.onclick=async()=>{if(!isFirebaseAdmin(current()))return;b.disabled=true;try{const result=await runTransaction(ref(db,'raayaSubmittedHours/'+uid+'/'+id),old=>old&&old.status==='قيد المراجعة'?{...old,status,reviewedBy:current().uid,reviewedAt:Date.now()}:undefined,{applyLocally:false});if(!result.committed)alert('لم يتم اعتماد التعديل');}catch(e){alert('تعذر حفظ حالة الساعات: '+(e.code||e.message))}finally{b.disabled=false}};line.append(b)}
     box.append(line);
    }
-   if(!entries.length){const empty=document.createElement('p');empty.textContent='لا توجد ساعات مرسلة';box.append(empty);}
-  },err=>{box.textContent='تعذر قراءة ساعات الموظفين: '+(err.code||err.message);});
+   window.raayaApplySharedFilters?.();
+  },err=>{if(current()?.uid!==u.uid||!box.isConnected)return;box.replaceChildren();box.dataset.loadState='error';window.raayaApplySharedFilters?.();});
  };
 
  // Preview-only anonymous session. Do not impersonate the existing admin Firebase users.
@@ -847,7 +848,7 @@ try {
   }catch(e){phoneNotice.textContent='تعذر تأكيد الرمز: '+(e.code||'تحقق من الرمز');}finally{confirmSms.disabled=false;}
  };
 
- const sharedCache=new Map();
+ const sharedCache=new Map();let jobsLoadState='loading';
  let sharedUnsub=[];
  let hiddenRequestKeys=new Set();
  let ownerSharedUnsub=[];
@@ -1106,7 +1107,7 @@ try {
  function renderSharedJobs(){
    const anchor=document.getElementById('adminJobs');if(!anchor)return;
    let panel=document.getElementById('raayaSharedJobsFeed');if(!panel){panel=document.createElement('div');panel.id='raayaSharedJobsFeed';anchor.after(panel);}
-   panel.replaceChildren();const rows=sharedCache.get('jobs')||[];
+   panel.replaceChildren();panel.dataset.loadState=jobsLoadState;const rows=jobsLoadState==='ready'?(sharedCache.get('jobs')||[]):[];
    const workersSlot=document.querySelector('#admin [data-final-admin-slot="workers"]');
    if(workersSlot){
      let accepted=document.getElementById('raayaSharedAcceptedWorkers');
@@ -1278,10 +1279,10 @@ try {
    taskTimer=setInterval(refreshTasks,15000);
  };
  const beginShared=async(u)=>{
-   sharedUnsub.forEach(fn=>fn());sharedUnsub=[];sharedCache.clear();hiddenRequestKeys.clear();sharedPanel.dataset.requestLoadState='loading';sharedPanel.remove();document.getElementById('raayaSharedJobsFeed')?.remove();document.getElementById('raayaSharedPaymentsFeed')?.remove();document.getElementById('raayaSharedAcceptedWorkers')?.remove();window.raayaAdminSharedRecords=undefined;
+   sharedUnsub.forEach(fn=>fn());sharedUnsub=[];sharedCache.clear();jobsLoadState='loading';hiddenRequestKeys.clear();sharedPanel.dataset.requestLoadState='loading';sharedPanel.remove();document.getElementById('raayaSharedJobsFeed')?.remove();document.getElementById('raayaSharedPaymentsFeed')?.remove();document.getElementById('raayaSharedAcceptedWorkers')?.remove();window.raayaAdminSharedRecords=undefined;
    if(!isFirebaseAdmin(u)){window.raayaApplySharedFilters?.();return;}
    renderShared();
-   try{await u.getIdTokenResult();}catch(e){if(current()?.uid===u.uid){sharedPanel.dataset.requestLoadState='error';sharedActionStatus('تعذر التحقق من حساب الإدارة');window.raayaApplySharedFilters?.();}return;}
+   try{await u.getIdTokenResult();}catch(e){if(current()?.uid===u.uid){sharedPanel.dataset.requestLoadState='error';jobsLoadState='error';renderSharedJobs();sharedActionStatus('تعذر التحقق من حساب الإدارة');window.raayaApplySharedFilters?.();}return;}
    if(current()?.uid!==u.uid || !isFirebaseAdmin(u))return;
    sharedUnsub.push(onValue(ref(db,'raayaAdminHiddenRequests'),snap=>{
      if(current()?.uid!==u.uid)return;
@@ -1290,14 +1291,15 @@ try {
    },e=>{if(current()?.uid===u.uid)sharedActionStatus('تعذر قراءة حالة الإخفاء: '+(e.code||e.message));}));
    for(const key of sharedKeys){
      const off=onValue(ref(db,'raayaShared/'+key),snap=>{
+       if(current()?.uid!==u.uid||!isFirebaseAdmin(u))return;
        const records=Object.values(snap.val()||{}).flatMap(owner=>owner&&typeof owner==='object'?Object.values(owner):[]).filter(v=>v&&typeof v==='object'&&v.ownerUid&&v.sourceId);
        sharedCache.set(key,records);
-       if(key==='requests')sharedPanel.dataset.requestLoadState='ready';
+       if(key==='requests')sharedPanel.dataset.requestLoadState='ready';else if(key==='jobs')jobsLoadState='ready';
        window.raayaAdminSharedRecords=Object.fromEntries(sharedCache);
        renderShared();
        // Shared records are exposed separately to avoid overwriting the user's local records.
        say('بيانات الإدارة المشتركة: '+records.length+' سجل في '+key);
-     },e=>{sharedActionStatus('تعذّر تحميل طلبات '+(key==='requests'?'الرعاية':'التوظيف')+' من الخادم. يرجى فحص صلاحيات الإدارة والاتصال.');if(key==='requests'){sharedPanel.dataset.requestLoadState='error';window.raayaApplySharedFilters?.();}say('تعذر قراءة بيانات الإدارة المشتركة: '+(e.code||e.message));});
+     },e=>{if(current()?.uid!==u.uid)return;sharedActionStatus('تعذّر تحميل طلبات '+(key==='requests'?'الرعاية':'التوظيف')+' من الخادم. يرجى فحص صلاحيات الإدارة والاتصال.');if(key==='requests'){sharedPanel.dataset.requestLoadState='error';window.raayaApplySharedFilters?.();}else if(key==='jobs'){jobsLoadState='error';sharedCache.delete('jobs');renderSharedJobs();window.raayaApplySharedFilters?.();}say('تعذر قراءة بيانات الإدارة المشتركة: '+(e.code||e.message));});
      sharedUnsub.push(off);
    }
    renderShared();
@@ -2011,6 +2013,7 @@ run();
   let shown=0;
   cards.forEach((card,i)=>{const visible=!!list[i]&&match(id,category,list[i]);card.hidden=!visible;card.style.display=visible?'':'none';if(visible)shown++;});
   const shared=applyShared(id,category);
+  if(id!=='adminRequests'){const cloud=shared!==null;root.hidden=cloud;root.style.display=cloud?'none':'';}
   const empty=document.getElementById('raaya-empty-'+id);
   if(empty){
    if(id==='adminRequests'){
@@ -2027,11 +2030,11 @@ run();
     empty.style.display=cloud?'none':'block';empty.hidden=cloud;
     // The local renderer uses a bare text node for an empty list. Avoid duplicate messages.
     for(const n of root.childNodes)if(n.nodeType===3&&n.textContent.trim()==='لا توجد طلبات')n.textContent='';
-   }else{if(empty.textContent!==translate('empty'))empty.textContent=translate('empty');empty.hidden=shown>0||!cards.length;}
+   }else{const cloud=shared!==null;const count=cloud?shared:shown;const label=translate(category);const message=cloud?'':(cards.length===0?'':label+' ('+count+')'+(count===0?' — '+translate('empty'):''));if(empty.textContent!==message)empty.textContent=message;empty.hidden=cloud||!message;}
   }
  }
  function applyShared(id,category){
-  const root=document.getElementById(id==='adminRequests'?'raayaSharedAdminItems':id==='adminJobs'?'raayaSharedJobsFeed':'');if(!root)return null;
+  const root=document.getElementById(id==='adminRequests'?'raayaSharedAdminItems':id==='adminJobs'?'raayaSharedJobsFeed':id==='adminHours'?'raayaSubmittedHoursFeed':'');if(!root)return null;
   let shown=0;
   for(const card of root.querySelectorAll('[data-shared-status]')){
    const visible=match(id,category,{status:card.dataset.sharedStatus,payment:card.dataset.sharedPayment,raayaVisit:{state:card.dataset.sharedVisit}});
@@ -2050,14 +2053,22 @@ run();
    if(message.textContent!==text)message.textContent=text;message.hidden=!text;
    for(const node of root.children)if(node.tagName==='P'&&node!==message&&!node.dataset.sharedStatus&&node.textContent.trim()==='لا توجد سجلات مشتركة')node.hidden=true;
   }
+  if(id!=='adminRequests'){
+   const state=root.dataset.loadState||'loading',l=language();
+   const messages={ar:{loading:'جاري تحميل البيانات من Firebase…',error:'تعذر تحميل البيانات من Firebase. تحقق من الاتصال وصلاحيات الإدارة.'},en:{loading:'Loading Firebase records…',error:'Unable to load Firebase records. Check connection and administrator permissions.'},he:{loading:'טוען נתונים…',error:'לא ניתן לטעון נתונים. בדוק חיבור והרשאות.'}}[l]||{loading:'جاري التحميل…',error:'تعذر تحميل البيانات'};
+   let heading=root.querySelector('h4');if(!heading){heading=document.createElement('h4');root.prepend(heading);}
+   const title=translate(category)+(state==='ready'?' ('+shown+')':'');if(heading.textContent!==title)heading.textContent=title;
+   let msg=root.querySelector('[data-raaya-filter-message]');if(!msg){msg=document.createElement('p');msg.dataset.raayaFilterMessage='1';msg.setAttribute('role','status');heading.after(msg);}
+   const text=state==='error'?messages.error:state!=='ready'?messages.loading:shown===0?translate('empty'):'';if(msg.textContent!==text)msg.textContent=text;msg.hidden=!text;
+  }
   return shown;
  }
- window.raayaApplySharedFilters=()=>{apply('adminRequests');apply('adminJobs');};
+ window.raayaApplySharedFilters=()=>{apply('adminRequests');apply('adminJobs');apply('adminHours');};
  function ensure(id){
   const root=document.getElementById(id);if(!root||document.getElementById('raaya-tabs-'+id))return;
   const tabs=document.createElement('div');tabs.id='raaya-tabs-'+id;tabs.className='raaya-status-tabs';
-  configs[id].forEach(category=>{const b=document.createElement('button');b.type='button';b.dataset.category=category;b.textContent=translate(category);b.onclick=id==='adminRequests'?null:e=>{e.preventDefault();e.stopPropagation();chosen[id]=category;apply(id);};tabs.appendChild(b)});
-  if(id==='adminRequests')tabs.addEventListener('click',e=>{const b=e.target.closest('button[data-category]');if(!b||!tabs.contains(b)||!configs[id].includes(b.dataset.category))return;e.preventDefault();e.stopImmediatePropagation();chosen[id]=b.dataset.category;apply(id);},true);
+  configs[id].forEach(category=>{const b=document.createElement('button');b.type='button';b.dataset.category=category;b.textContent=translate(category);tabs.appendChild(b)});
+  tabs.addEventListener('click',e=>{const b=e.target.closest('button[data-category]');if(!b||!tabs.contains(b)||!configs[id].includes(b.dataset.category))return;e.preventDefault();e.stopImmediatePropagation();chosen[id]=b.dataset.category;apply(id);},true);
   root.parentElement.insertBefore(tabs,root);
   const empty=document.createElement('p');empty.id='raaya-empty-'+id;empty.className='raaya-status-empty';empty.hidden=true;if(id==='adminRequests'){empty.setAttribute('role','status');empty.setAttribute('aria-live','polite');}root.before(empty);
  }
@@ -3305,7 +3316,7 @@ window.raayaOpenSecureBank=async function(button){
   const exit=admin.querySelector('.top button[data-k="exit"]');if(exit){exit.hidden=!!active;exit.style.display=active?'none':'';exit.onclick=()=>window.raayaRoleExit();}
   for(const node of admin.querySelectorAll('[data-final-admin-slot] > button.secondary'))node.hidden=false;
  }
- window.raayaAdminOpen=function(key){active=slots[key]?key:null;reconcile();if(active==='requests')window.raayaApplySharedFilters?.();window.scrollTo(0,0);};
+ window.raayaAdminOpen=function(key){active=slots[key]?key:null;reconcile();if(['requests','hours','jobs'].includes(active))window.raayaApplySharedFilters?.();window.scrollTo(0,0);};
  menu.addEventListener('click',event=>{const b=event.target.closest('[data-final-admin-key]');if(!b)return;event.preventDefault();event.stopImmediatePropagation();window.raayaAdminOpen(b.dataset.finalAdminKey)},true);
  // New Firebase panels may be inserted asynchronously. Avoid recursive mutation loops.
  let pending=false;const observer=new MutationObserver(records=>{if(pending||!records.some(r=>r.addedNodes.length))return;pending=true;queueMicrotask(()=>{pending=false;reconcile()})});observer.observe(admin,{childList:true,subtree:true});
