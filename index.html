@@ -2750,64 +2750,59 @@ window.raayaOpenSecureBank=async function(button){
 (async()=>{
  const configNode=document.getElementById('raaya-firebase-config');if(!configNode)return;
  let cfg;try{cfg=JSON.parse(configNode.textContent)}catch{return}
- const [{initializeApp,getApps},{getAuth,onAuthStateChanged},{getDatabase,ref,onValue,set,get}]=await Promise.all([
+ const [{initializeApp,getApps},{getAuth,onAuthStateChanged},{getDatabase,ref,onValue,push,set,get,runTransaction}]=await Promise.all([
  import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js'),
  import('https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js'),
  import('https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js')]);
  const app=getApps().find(x=>x.name==='[DEFAULT]')||initializeApp(cfg),auth=getAuth(app),db=getDatabase(app);
  const admins=new Set(['FZbVofv8lFWtjSXPDsIRngYmK8H3','I2m6vtkc0VX3xs3OWhbZ4vMg7SE3']);
+ const states=['بانتظار الدفع','نشط','موقوف','منتهي'];
  const el=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;return n};
- const section=(parent,id,title)=>{let p=document.getElementById(id);if(!p){p=el('div');p.id=id;p.className='pill';p.style.marginTop='14px';p.appendChild(el('h3',title));parent.appendChild(p)}return p};
- const safeDate=v=>/^\d{4}-\d{2}-\d{2}$/.test(v)&&!isNaN(Date.parse(v));
- let stop=()=>{};
+ const today=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')};
+ const safeDate=v=>/^\d{4}-\d{2}-\d{2}$/.test(v||'')&&!isNaN(Date.parse(v))&&new Date(v).toISOString().slice(0,10)===v;
+ const validKey=v=>typeof v==='string'&&v.length>0&&!/[.#$\[\]/\x00-\x1f\x7f]/.test(v);
+ const endOf=(start,duration)=>{const [y,m,d]=start.split('-').map(Number);const end=new Date(Date.UTC(y,m-1+duration,1));const last=new Date(Date.UTC(end.getUTCFullYear(),end.getUTCMonth()+1,0)).getUTCDate();end.setUTCDate(Math.min(d,last));return end.toISOString().slice(0,10)};
+ const effective=v=>v.status==='نشط'&&safeDate(v.endDate)&&v.endDate<=today()?'منتهي':v.status;
+ let stops=[],generation=0;
  function render(user){
-  stop();stop=()=>{};
+  const gen=++generation;stops.forEach(f=>f());stops=[];
   for(const id of ['raayaSubscriptionClient','raayaSubscriptionAdmin'])document.getElementById(id)?.remove();
   if(!user)return;
-  const isAdmin=admins.has(user.uid);
-  const host=document.getElementById(isAdmin?'admin':'client');if(!host)return;
-  const panel=section(host,isAdmin?'raayaSubscriptionAdmin':'raayaSubscriptionClient','الاشتراكات الشهرية');
-  const status=el('p','');status.setAttribute('aria-live','polite');
-  const listing=el('div');panel.append(listing,status);
-  const path=isAdmin?'raayaSubscriptions':'raayaSubscriptions/'+user.uid;
-  stop=onValue(ref(db,path),snap=>{
-   listing.replaceChildren();
-   const records=snap.val()||{};
-   const rows=isAdmin?Object.entries(records).flatMap(([uid,items])=>Object.entries(items||{}).map(([id,v])=>({uid,id,v}))):Object.entries(records).map(([id,v])=>({uid:user.uid,id,v}));
-   if(!rows.length)listing.appendChild(el('p','لا توجد اشتراكات مسجلة'));
-   rows.forEach(({uid,id,v})=>{
-    if(!v||typeof v!=='object')return;
-    const item=el('p');
-    item.textContent=(isAdmin?'العميل: '+uid+' | ':'')+'الباقة: '+(v.plan||'—')+' | السعر: '+(v.price??'—')+' | المدة: '+(v.durationMonths??'—')+' شهر | الحالة: '+(v.status||'—')+' | البداية: '+(v.startDate||'—')+' | النهاية: '+(v.endDate||'—');
-    listing.appendChild(item);
+  const isAdmin=admins.has(user.uid),host=document.getElementById(isAdmin?'admin':'client');if(!host)return;
+  const panel=el('div');panel.id=isAdmin?'raayaSubscriptionAdmin':'raayaSubscriptionClient';panel.className='pill';panel.style.marginTop='14px';panel.append(el('h3','الاشتراكات الشهرية'));host.append(panel);
+  const status=el('p','');status.setAttribute('aria-live','polite');const listing=el('div','جاري تحميل الاشتراكات…');panel.append(status,listing);
+  let clients=new Map(),rows=[],form,customer,plan,price,months,start,statusField,save,cancel,editing=null,loading=true,busy=false;
+  const live=()=>gen===generation&&auth.currentUser?.uid===user.uid;
+  const authorized=()=>live()&&isAdmin&&admins.has(auth.currentUser.uid);
+  const button=(label,handler)=>{const b=el('button',label);b.type='button';b.onclick=handler;return b};
+  function reset(){editing=null;form.reset();customer.disabled=false;start.value=today();save.textContent='حفظ الاشتراك';cancel.hidden=true;refreshClients();}
+  function refreshClients(){if(!customer)return;const prev=editing?.uid||customer.value;customer.replaceChildren();const empty=el('option','اختر العميل');empty.value='';customer.append(empty);const names=new Map(clients);for(const r of rows)if(!names.has(r.uid))names.set(r.uid,r.v.customerName||'عميل سابق');if(editing&&!names.has(editing.uid))names.set(editing.uid,editing.v.customerName||'عميل سابق');for(const [uid,name] of names){const o=el('option',name+' — '+uid.slice(-6));o.value=uid;customer.append(o)}if(names.has(prev))customer.value=prev;}
+  function beginEdit(r){if(!authorized()||busy)return;editing=r;refreshClients();customer.value=r.uid;customer.disabled=true;plan.value=r.v.plan||'';price.value=r.v.price??'';months.value=r.v.durationMonths??'';start.value=r.v.startDate||'';statusField.value=states.includes(r.v.status)?r.v.status:states[0];save.textContent='حفظ التعديلات';cancel.hidden=false;form.scrollIntoView({block:'nearest'});}
+  async function change(r,kind,b){if(!authorized()||busy)return;const old=r.v;let patch;
+   if(kind==='renew'){if(!safeDate(old.endDate)||!Number.isInteger(Number(old.durationMonths))||Number(old.durationMonths)<1||Number(old.durationMonths)>120){status.textContent='عدّل مدة الاشتراك وتاريخه أولاً';return}if(!confirm('تجديد الاشتراك لنفس المدة والسعر؟ سيصبح بانتظار الدفع.'))return;const s=old.endDate>today()?old.endDate:today();patch={startDate:s,endDate:endOf(s,Number(old.durationMonths)),status:'بانتظار الدفع'};}
+   if(kind==='stop'){if(!confirm('إيقاف الاشتراك؟'))return;patch={status:'موقوف',statusBeforePause:old.status};}
+   if(kind==='resume'){if(!safeDate(old.endDate)||old.endDate<=today()){status.textContent='انتهت مدة الاشتراك؛ استخدم التجديد';return}patch={status:old.statusBeforePause==='نشط'?'نشط':'بانتظار الدفع',statusBeforePause:null};}
+   if(kind==='delete'&&!confirm('حذف الاشتراك نهائياً؟'))return;
+   if(!authorized())return;busy=true;b.disabled=true;status.textContent='جاري حفظ الإجراء…';
+   try{const target=ref(db,'raayaSubscriptions/'+r.uid+'/'+r.id);await get(target);const result=await runTransaction(target,current=>{if(!authorized()||!current||JSON.stringify(current)!==JSON.stringify(old))return;return kind==='delete'?null:{...current,...patch,updatedAt:Date.now(),updatedBy:user.uid}},{applyLocally:false});if(live()){status.textContent=result.committed?'تم حفظ الإجراء في Firebase':'تغير الاشتراك؛ حدّث القائمة وحاول مجدداً';if(result.committed&&editing?.id===r.id&&editing.uid===r.uid)reset()}}
+   catch(e){if(live())status.textContent='تعذر حفظ الإجراء؛ راجع الاتصال وصلاحيات Firebase';}finally{busy=false;b.disabled=false;}
+  }
+  function draw(){listing.replaceChildren();if(loading){listing.append(el('p','جاري تحميل الاشتراكات…'));return}if(!rows.length)listing.append(el('p','لا توجد اشتراكات مسجلة'));
+   for(const r of rows){const {uid,v}=r;const item=el('div');item.className='pill';const state=effective(v);if(isAdmin)item.append(el('p','العميل: '+(clients.get(uid)||v.customerName||uid)));item.append(el('p','الباقة: '+(v.plan||'—')+' | السعر: '+(v.price??'—')+' شيكل | المدة: '+(v.durationMonths??'—')+' شهر'),el('p','الحالة: '+(state||'—')+' | البداية: '+(v.startDate||'—')+' | النهاية: '+(v.endDate||'—')));if(isAdmin){const action=(label,k)=>{const b=button(label,()=>change(r,k,b));item.append(b)};item.append(button('تعديل الاشتراك',()=>beginEdit(r)));action('تجديد الاشتراك','renew');if(state==='نشط'||state==='بانتظار الدفع')action('إيقاف الاشتراك','stop');if(state==='موقوف')action('إعادة تفعيل الاشتراك','resume');action('حذف الاشتراك','delete')}listing.append(item)}
+  }
+  if(isAdmin){
+   form=el('form');form.style.display='grid';form.style.gap='8px';const field=(name,placeholder,type='text')=>{const i=el('input');i.name=name;i.placeholder=placeholder;i.type=type;i.required=true;i.setAttribute('aria-label',placeholder);form.append(i);return i};
+   customer=el('select');customer.name='uid';customer.required=true;customer.setAttribute('aria-label','اختر العميل');form.append(customer);const clientNote=el('p','تظهر أسماء العملاء الذين لديهم طلبات رعاية مسجلة في Firebase.');form.append(clientNote);
+   plan=field('plan','اسم الباقة');price=field('price','سعر الباقة بالشيكل','number');price.min='0';price.step='0.01';months=field('months','المدة بالأشهر','number');months.min='1';months.max='120';months.step='1';start=field('start','تاريخ بداية الاشتراك','date');
+   statusField=el('select');statusField.name='status';statusField.setAttribute('aria-label','حالة الاشتراك');for(const s of states){const o=el('option',s);o.value=s;statusField.append(o)}form.append(statusField);save=el('button','حفظ الاشتراك');save.type='submit';cancel=button('إلغاء التعديل',()=>{if(!busy)reset()});cancel.className='secondary';form.append(save,cancel);panel.insertBefore(form,listing);reset();
+   form.addEventListener('submit',async e=>{e.preventDefault();if(!authorized()||busy)return;const uid=customer.value,p=plan.value.trim(),cost=Number(price.value),duration=Number(months.value),s=start.value,state=statusField.value,old=editing;
+    if(!validKey(uid)||admins.has(uid)||(!old&&!clients.has(uid))||!p||price.value===''||!Number.isFinite(cost)||cost<0||!Number.isInteger(duration)||duration<1||duration>120||!safeDate(s)||!states.includes(state)){status.textContent='تحقق من بيانات الاشتراك والعميل';return}
+    const endDate=endOf(s,duration);if(state==='نشط'&&endDate<=today()){status.textContent='لا يمكن تفعيل اشتراك انتهت مدته';return}
+    busy=true;save.disabled=true;status.textContent='جاري الحفظ…';try{const values={customerName:clients.get(uid)||old?.v.customerName||'',plan:p,price:cost,durationMonths:duration,startDate:s,endDate,status:state,updatedAt:Date.now(),updatedBy:user.uid};if(old){const target=ref(db,'raayaSubscriptions/'+old.uid+'/'+old.id);await get(target);const result=await runTransaction(target,current=>authorized()&&current&&JSON.stringify(current)===JSON.stringify(old.v)?{...current,...values}:undefined,{applyLocally:false});if(!result.committed)throw Error('تغير الاشتراك؛ أعد فتح التعديل')}else{if(!authorized())return;await set(push(ref(db,'raayaSubscriptions/'+uid)),{...values,createdBy:user.uid,createdAt:Date.now()})}if(live()){reset();status.textContent='تم حفظ الاشتراك في Firebase'}}catch(err){if(live())status.textContent='تعذر الحفظ؛ راجع صلاحيات Firebase أو أعد فتح التعديل'}finally{busy=false;save.disabled=false}
    });
-   status.textContent='';
-  },()=>{status.textContent='تعذر قراءة الاشتراكات؛ تحقق من صلاحيات Firebase'});
-  if(!isAdmin)return;
-  const form=el('form');form.style.display='grid';form.style.gap='8px';
-  const field=(name,placeholder,type='text')=>{const i=el('input');i.name=name;i.placeholder=placeholder;i.type=type;i.required=true;i.setAttribute('aria-label',placeholder);form.appendChild(i);return i};
-  const uid=field('uid','معرّف العميل في Firebase (UID)');
-  const plan=field('plan','اسم الباقة');
-  const price=field('price','سعر الباقة','number');price.min='0';price.step='0.01';
-  const months=field('months','المدة بالأشهر','number');months.min='1';months.max='120';months.step='1';
-  const start=field('start','تاريخ بداية الاشتراك','date');
-  const statusField=el('select');statusField.name='status';statusField.setAttribute('aria-label','حالة الاشتراك');
-  for(const v of ['بانتظار الدفع','نشط','موقوف','منتهي']){const o=el('option',v);o.value=v;statusField.appendChild(o)}form.appendChild(statusField);
-  const save=el('button','حفظ الاشتراك');save.type='submit';form.appendChild(save);panel.appendChild(form);
-  form.addEventListener('submit',async e=>{
-   e.preventDefault();if(!auth.currentUser||!admins.has(auth.currentUser.uid))return;
-   const customer=uid.value.trim(),p=plan.value.trim(),cost=Number(price.value),duration=Number(months.value);
-   if(!/^[A-Za-z0-9_-]{10,128}$/.test(customer)||!p||!Number.isFinite(cost)||cost<0||!Number.isInteger(duration)||duration<1||duration>120||!safeDate(start.value)){status.textContent='تحقق من بيانات الاشتراك ومعرّف العميل';return}
-   const [y,m,d]=start.value.split('-').map(Number);const end=new Date(Date.UTC(y,m-1+duration,d));if(end.getUTCDate()!==d)end.setUTCDate(0);
-   const endDate=end.toISOString().slice(0,10);
-   save.disabled=true;status.textContent='جاري الحفظ في Firebase…';
-   try{
-    const id=Date.now().toString(36);
-    await set(ref(db,'raayaSubscriptions/'+customer+'/'+id),{plan:p,price:cost,durationMonths:duration,startDate:start.value,endDate,status:statusField.value,createdBy:auth.currentUser.uid,createdAt:Date.now(),updatedAt:Date.now()});
-    status.textContent='تم حفظ الاشتراك في Firebase';form.reset();
-   }catch(err){status.textContent='فشل حفظ الاشتراك؛ تحقق من قواعد Firebase'}
-   finally{save.disabled=false}
-  });
+   stops.push(onValue(ref(db,'raayaShared/requests'),snap=>{if(!live())return;clients=new Map();for(const [uid,items] of Object.entries(snap.val()||{})){if(!validKey(uid)||admins.has(uid))continue;for(const v of Object.values(items||{})){if(v?.ownerUid&&v.ownerUid!==uid)continue;const name=String(v?.name||v?.clientName||v?.client||'').trim();if(name){clients.set(uid,name);break}}}clientNote.textContent=clients.size?'اختر العميل من طلبات الرعاية المسجلة.':'لا توجد أسماء عملاء في طلبات الرعاية المسجلة.';refreshClients();draw()},()=>{if(live())clientNote.textContent='تعذر تحميل أسماء العملاء؛ تحقق من صلاحيات قراءة الطلبات'}));
+  }
+  stops.push(onValue(ref(db,isAdmin?'raayaSubscriptions':'raayaSubscriptions/'+user.uid),snap=>{if(!live())return;loading=false;const data=snap.val()||{};rows=(isAdmin?Object.entries(data).flatMap(([uid,items])=>Object.entries(items||{}).map(([id,v])=>({uid,id,v}))):Object.entries(data).map(([id,v])=>({uid:user.uid,id,v}))).filter(r=>validKey(r.uid)&&validKey(r.id)&&r.v&&typeof r.v==='object');refreshClients();draw()},()=>{if(live()){loading=true;listing.textContent='تعذر قراءة الاشتراكات؛ تحقق من صلاحيات Firebase'}}));
  }
  onAuthStateChanged(auth,render);
 })().catch(()=>{});
